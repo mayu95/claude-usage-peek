@@ -1,0 +1,15 @@
+# 生成的看板 (含你的用量数据, 别提交)
+dashboard.html
+
+# 日志
+*.log
+
+# python
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+
+# 桌面 app 机器相关, 用 make_app.command 各自生成
+*.app/
