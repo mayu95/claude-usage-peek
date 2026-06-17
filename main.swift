@@ -265,8 +265,9 @@ final class AppController: NSObject, NSApplicationDelegate {
         updateTitle()
         refreshQuota()  // 启动先拉一次 / fetch once on launch
 
-        // 每 60 秒后台刷新限额 + 更新菜单栏标题 / refresh every 60s
-        let t = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        // 每 120 秒后台刷新限额 + 更新菜单栏标题。额度变化慢, 不必更勤(每次都打一次 API)。
+        // refresh every 120s — quota changes slowly, no need to poll the API more often.
+        let t = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             self?.refreshQuota()
         }
         RunLoop.main.add(t, forMode: .common)
