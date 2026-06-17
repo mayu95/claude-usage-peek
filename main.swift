@@ -45,6 +45,9 @@ let STRINGS: [String: [Lang: String]] = [
     "menuDash":    [.en: "📊 Open dashboard",  .zh: "📊 展开为看板", .ja: "📊 ダッシュボードを開く"],
     "menuLang":    [.en: "Language",           .zh: "语言",          .ja: "言語"],
     "quit":        [.en: "Quit",               .zh: "退出",          .ja: "終了"],
+    "note":        [.en: "Official rate-limit value (whole-% precision); may differ ~1% from the usage page.",
+                    .zh: "官方限流值（整数精度），可能与官网用量页差约 1%。",
+                    .ja: "公式のレート制限値（整数精度）。使用状況ページと約 1% 異なる場合があります。"],
 ]
 
 func tr(_ key: String) -> String {
@@ -158,11 +161,12 @@ final class PanelViewController: NSViewController {
     private let bar7d = BarView()
     private let detail7d = NSTextField(labelWithString: "")
     private let footer = NSTextField(labelWithString: "")
+    private let note = NSTextField(labelWithString: "")
     private let refreshButton = NSButton(title: "", target: nil, action: nil)
     private let dashButton = NSButton(title: "", target: nil, action: nil)
 
     override func loadView() {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 270))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 310))
 
         header.font = .boldSystemFont(ofSize: 16)
         header.alignment = .center
@@ -175,6 +179,12 @@ final class PanelViewController: NSViewController {
         footer.font = .systemFont(ofSize: 11)
         footer.textColor = .tertiaryLabelColor
         footer.alignment = .center
+
+        note.font = .systemFont(ofSize: 10)
+        note.textColor = .tertiaryLabelColor
+        note.alignment = .center
+        note.maximumNumberOfLines = 0
+        note.lineBreakMode = .byWordWrapping
 
         for b in [bar5h, bar7d] {
             b.translatesAutoresizingMaskIntoConstraints = false
@@ -202,6 +212,7 @@ final class PanelViewController: NSViewController {
             footer,
             refreshButton,
             dashButton,
+            note,
         ])
         stack.orientation = .vertical
         stack.alignment = .centerX
@@ -214,7 +225,7 @@ final class PanelViewController: NSViewController {
             stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -18),
         ])
-        for v in [bar5h, bar7d, refreshButton, dashButton] {
+        for v in [bar5h, bar7d, refreshButton, dashButton, note] {
             v.widthAnchor.constraint(equalToConstant: 260).isActive = true
         }
         self.view = container
@@ -232,6 +243,7 @@ final class PanelViewController: NSViewController {
         title7d.stringValue = tr("win7d")
         refreshButton.title = tr("refresh")
         dashButton.title = tr("dashboard")
+        note.stringValue = tr("note")
     }
 
     func refresh() {
