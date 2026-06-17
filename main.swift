@@ -1,27 +1,63 @@
-// claude-usage-peek 菜单栏小工具 —— 原生 Swift，单文件，swiftc 编译，无需 Xcode。
+// claude-usage-peek menu-bar tool — native Swift, single file, built with swiftc (no Xcode).
 //
-// 菜单栏出现 🤖 + 5h 剩余额度%。左键点开是个弹窗面板：
-//   · 5h / 7d 两条进度条（用量填充，绿→橙→红）+ 剩余% + 重置时间
-//   · 「🔄 刷新」重新拉官方限额
-//   · 「📊 展开为看板 →」启动本地服务并用浏览器打开完整 HTML 看板
-// 右键点图标 = 小菜单（刷新 / 展开 / 退出）。
+// A 🤖 icon in the menu bar shows the 5h remaining quota %. Left-click opens a
+// popover panel: 5h / 7d progress bars (fill = usage, green→orange→red) + remaining %
+// + reset time, a "Refresh" button and an "Open dashboard →" button. Right-click
+// gives a small menu (refresh / dashboard / language / quit).
 //
-// 数据来自 quota.py 写的缓存 ~/.claude/usage-peek-quota.json（只读）。
-// python 路径和项目文件夹由 build_menubar.command 生成的 Config.swift 注入
-// （kPythonPath / kProjectDir），所以本文件不写死路径；搬动文件夹后重新 build 即可。
+// UI language is en / zh / ja, stored in UserDefaults key "lang" (default "en").
+// It can be set at install time by build_menubar.command and switched anytime from
+// the right-click menu.
 //
-// 依赖 Config.swift 提供：let kPythonPath: String / let kProjectDir: String
-// 详见 build_menubar.command。
+// Data is read (read-only) from the cache quota.py writes: ~/.claude/usage-peek-quota.json
+// The python path and project dir are injected by build_menubar.command into Config.swift
+// (kPythonPath / kProjectDir), so no paths are hard-coded here; rebuild after moving the folder.
+//
+// Requires Config.swift to provide: let kPythonPath: String / let kProjectDir: String
 
 import AppKit
 
-// MARK: - 额度数据
+// MARK: - i18n
+
+enum Lang: String { case en, zh, ja }
+
+func currentLang() -> Lang {
+    Lang(rawValue: UserDefaults.standard.string(forKey: "lang") ?? "en") ?? .en
+}
+
+let STRINGS: [String: [Lang: String]] = [
+    "header":      [.en: "Claude Usage",      .zh: "Claude 用量",   .ja: "Claude 使用量"],
+    "win5h":       [.en: "5-hour window",     .zh: "5 小时窗口",     .ja: "5時間ウィンドウ"],
+    "win7d":       [.en: "7-day window",      .zh: "7 天窗口",       .ja: "7日間ウィンドウ"],
+    "used":        [.en: "Used",              .zh: "已用",          .ja: "使用"],
+    "left":        [.en: "Left",              .zh: "剩",            .ja: "残り"],
+    "reset":       [.en: "Reset",             .zh: "重置",          .ja: "リセット"],
+    "nodata":      [.en: "No data yet — click Refresh", .zh: "暂无数据，点「刷新」拉取", .ja: "データなし —「更新」を押してください"],
+    "noquota":     [.en: "No official quota yet (sign in to Claude Code first)",
+                    .zh: "还没拿到官方限额（需登录过 Claude Code）",
+                    .ja: "公式の利用上限を取得できません（Claude Code へのログインが必要）"],
+    "updated":     [.en: "Updated",           .zh: "更新于",        .ja: "更新"],
+    "status":      [.en: "Status",            .zh: "状态",          .ja: "ステータス"],
+    "refresh":     [.en: "🔄 Refresh",         .zh: "🔄 刷新",       .ja: "🔄 更新"],
+    "dashboard":   [.en: "📊 Open dashboard →", .zh: "📊 展开为看板 →", .ja: "📊 ダッシュボードを開く →"],
+    "menuRefresh": [.en: "🔄 Refresh quota",   .zh: "🔄 刷新限额",   .ja: "🔄 利用上限を更新"],
+    "menuDash":    [.en: "📊 Open dashboard",  .zh: "📊 展开为看板", .ja: "📊 ダッシュボードを開く"],
+    "menuLang":    [.en: "Language",           .zh: "语言",          .ja: "言語"],
+    "quit":        [.en: "Quit",               .zh: "退出",          .ja: "終了"],
+]
+
+func tr(_ key: String) -> String {
+    let l = currentLang()
+    return STRINGS[key]?[l] ?? STRINGS[key]?[.en] ?? key
+}
+
+// MARK: - 额度数据 / Quota data
 
 /// 解析 ~/.claude/usage-peek-quota.json
 struct Quota {
-    var util5h: Double?      // 已用百分比 0~100
+    var util5h: Double?      // 已用百分比 0~100 / used percentage
     var util7d: Double?
-    var reset5h: Int?        // epoch 秒
+    var reset5h: Int?        // epoch 秒 / epoch seconds
     var reset7d: Int?
     var status: String?
     var updatedAt: String?
@@ -50,7 +86,7 @@ struct Quota {
     }
 }
 
-/// epoch 秒 -> "HH:mm"（今天）或 "MM-dd HH:mm"（跨天）
+/// epoch 秒 -> "HH:mm"（今天）或 "MM-dd HH:mm"（跨天） / today vs cross-day
 func fmtReset(_ ts: Int?) -> String {
     guard let ts, ts > 0 else { return "?" }
     let date = Date(timeIntervalSince1970: TimeInterval(ts))
@@ -60,7 +96,7 @@ func fmtReset(_ ts: Int?) -> String {
     return f.string(from: date)
 }
 
-/// 用量百分比 -> 进度条颜色（越满越红）
+/// 用量百分比 -> 进度条颜色（越满越红） / bar color, redder as it fills
 func barColor(_ used: Double?) -> NSColor {
     guard let used else { return .systemGray }
     switch used {
@@ -70,7 +106,7 @@ func barColor(_ used: Double?) -> NSColor {
     }
 }
 
-// MARK: - 进度条
+// MARK: - 进度条 / Progress bar
 
 final class BarView: NSView {
     var progress: CGFloat = 0 { didSet { needsDisplay = true } }
@@ -87,26 +123,26 @@ final class BarView: NSView {
     }
 }
 
-// MARK: - 弹窗面板
+// MARK: - 弹窗面板 / Popover panel
 
 final class PanelViewController: NSViewController {
     var refreshAction: (() -> Void)?
     var dashboardAction: (() -> Void)?
 
-    private let title5h = NSTextField(labelWithString: "5 小时窗口")
+    private let header = NSTextField(labelWithString: "")
+    private let title5h = NSTextField(labelWithString: "")
     private let bar5h = BarView()
     private let detail5h = NSTextField(labelWithString: "")
-    private let title7d = NSTextField(labelWithString: "7 天窗口")
+    private let title7d = NSTextField(labelWithString: "")
     private let bar7d = BarView()
     private let detail7d = NSTextField(labelWithString: "")
     private let footer = NSTextField(labelWithString: "")
-    private let refreshButton = NSButton(title: "🔄 刷新", target: nil, action: nil)
-    private let dashButton = NSButton(title: "📊 展开为看板 →", target: nil, action: nil)
+    private let refreshButton = NSButton(title: "", target: nil, action: nil)
+    private let dashButton = NSButton(title: "", target: nil, action: nil)
 
     override func loadView() {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 270))
 
-        let header = NSTextField(labelWithString: "🤖 Claude 用量")
         header.font = .boldSystemFont(ofSize: 16)
         header.alignment = .center
 
@@ -161,24 +197,34 @@ final class PanelViewController: NSViewController {
             v.widthAnchor.constraint(equalToConstant: 260).isActive = true
         }
         self.view = container
+        applyTexts()
         refresh()
     }
 
     @objc private func refreshTapped() { refreshAction?() }
     @objc private func dashTapped() { dashboardAction?() }
 
+    /// 切换语言后更新所有静态文案 / update static labels after a language switch
+    func applyTexts() {
+        header.stringValue = "🤖 " + tr("header")
+        title5h.stringValue = tr("win5h")
+        title7d.stringValue = tr("win7d")
+        refreshButton.title = tr("refresh")
+        dashButton.title = tr("dashboard")
+    }
+
     func refresh() {
         guard let q = Quota.load() else {
-            detail5h.stringValue = "暂无数据，点「刷新」拉取"
+            detail5h.stringValue = tr("nodata")
             detail7d.stringValue = ""
             bar5h.progress = 0; bar7d.progress = 0
-            footer.stringValue = "还没拿到官方限额（需登录过 Claude Code）"
+            footer.stringValue = tr("noquota")
             return
         }
         func line(_ used: Double?, _ reset: Int?) -> String {
             let rem = q.remaining(used)
             let u = used == nil ? "?" : String(format: "%.0f", used!)
-            return "已用 \(u)% · 剩 \(rem.map { "\($0)" } ?? "?")% · 重置 \(fmtReset(reset))"
+            return "\(tr("used")) \(u)% · \(tr("left")) \(rem.map { "\($0)" } ?? "?")% · \(tr("reset")) \(fmtReset(reset))"
         }
         bar5h.progress = CGFloat((q.util5h ?? 0) / 100); bar5h.color = barColor(q.util5h)
         bar7d.progress = CGFloat((q.util7d ?? 0) / 100); bar7d.color = barColor(q.util7d)
@@ -188,14 +234,14 @@ final class PanelViewController: NSViewController {
         var foot = ""
         if let upd = q.updatedAt, let date = ISO8601DateFormatter().date(from: upd) {
             let f = DateFormatter(); f.dateFormat = "HH:mm"
-            foot = "更新于 \(f.string(from: date))"
+            foot = "\(tr("updated")) \(f.string(from: date))"
         }
-        if let s = q.status, s != "allowed" { foot += (foot.isEmpty ? "" : " · ") + "状态 \(s)" }
+        if let s = q.status, s != "allowed" { foot += (foot.isEmpty ? "" : " · ") + "\(tr("status")) \(s)" }
         footer.stringValue = foot
     }
 }
 
-// MARK: - 主控制器
+// MARK: - 主控制器 / App controller
 
 final class AppController: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -217,16 +263,16 @@ final class AppController: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
 
         updateTitle()
-        refreshQuota()  // 启动先拉一次
+        refreshQuota()  // 启动先拉一次 / fetch once on launch
 
-        // 每 60 秒后台刷新限额 + 更新菜单栏标题
+        // 每 60 秒后台刷新限额 + 更新菜单栏标题 / refresh every 60s
         let t = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.refreshQuota()
         }
         RunLoop.main.add(t, forMode: .common)
     }
 
-    /// 用缓存刷新菜单栏标题（显示 5h 剩余%）
+    /// 用缓存刷新菜单栏标题（显示 5h 剩余%） / menu-bar title shows 5h remaining %
     private func updateTitle() {
         let q = Quota.load()
         if let rem = q?.remaining(q?.util5h) {
@@ -268,7 +314,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         do {
             try p.run()
             if wait { p.waitUntilExit() }
-        } catch { /* 忽略：python 缺失等 */ }
+        } catch { /* 忽略：python 缺失等 / ignore: python missing, etc. */ }
     }
 
     @objc private func statusClicked() {
@@ -291,10 +337,25 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "🔄 刷新限额", action: #selector(menuRefresh), keyEquivalent: "r").target = self
-        menu.addItem(withTitle: "📊 展开为看板", action: #selector(menuDash), keyEquivalent: "d").target = self
+        menu.addItem(withTitle: tr("menuRefresh"), action: #selector(menuRefresh), keyEquivalent: "r").target = self
+        menu.addItem(withTitle: tr("menuDash"), action: #selector(menuDash), keyEquivalent: "d").target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        // 语言子菜单 / language submenu
+        let langItem = NSMenuItem(title: tr("menuLang"), action: nil, keyEquivalent: "")
+        let langMenu = NSMenu()
+        for (code, name) in [("en", "English"), ("zh", "中文"), ("ja", "日本語")] {
+            let it = NSMenuItem(title: name, action: #selector(pickLang(_:)), keyEquivalent: "")
+            it.target = self
+            it.representedObject = code
+            it.state = (code == currentLang().rawValue) ? .on : .off
+            langMenu.addItem(it)
+        }
+        menu.addItem(langItem)
+        menu.setSubmenu(langMenu, for: langItem)
+
+        menu.addItem(.separator())
+        menu.addItem(withTitle: tr("quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         if let button = statusItem.button {
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
         }
@@ -302,12 +363,20 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     @objc private func menuRefresh() { refreshQuota() }
     @objc private func menuDash() { openDashboard() }
+
+    @objc private func pickLang(_ sender: NSMenuItem) {
+        guard let code = sender.representedObject as? String else { return }
+        UserDefaults.standard.set(code, forKey: "lang")
+        panel.applyTexts()
+        panel.refresh()
+        updateTitle()
+    }
 }
 
-// MARK: - 启动
+// MARK: - 启动 / Launch
 
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory)   // 不进 Dock，只在菜单栏
+app.setActivationPolicy(.accessory)   // 不进 Dock，只在菜单栏 / menu bar only, no Dock
 let controller = AppController()
 app.delegate = controller
 app.run()

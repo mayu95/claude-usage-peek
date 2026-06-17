@@ -16,10 +16,31 @@ fi
 
 APP="$HOME/Desktop/Claude Usage Bar.app"
 EXEC="ClaudeUsageBar"
+BUNDLE_ID="local.claude-usage-peek.menubar"
 
 echo "python3 : $PY"
 echo "文件夹  : $DIR"
 echo "app     : $APP"
+
+# 选择界面语言 (默认英文; 之后也能在菜单栏右键 -> Language 里改)。
+# Pick UI language (default English; also switchable later via right-click -> Language).
+LANG_CHOICE="en"
+if [ -t 0 ]; then
+  echo
+  echo "界面语言 / Language / 言語:"
+  echo "  1) English (default)"
+  echo "  2) 中文"
+  echo "  3) 日本語"
+  printf "> "
+  read -r ans || true
+  case "$ans" in
+    2) LANG_CHOICE="zh" ;;
+    3) LANG_CHOICE="ja" ;;
+    *) LANG_CHOICE="en" ;;
+  esac
+fi
+defaults write "$BUNDLE_ID" lang -string "$LANG_CHOICE" 2>/dev/null || true
+echo "语言 / language : $LANG_CHOICE"
 
 # 把本机 python 路径与项目文件夹注入编译 (不写死在源码里; 搬动文件夹后重 build 即可)
 cat > Config.swift <<EOF

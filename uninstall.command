@@ -8,12 +8,15 @@ set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "正在卸载 claude-usage-peek ..."
 
-# 1) 停掉后台服务 / 看门狗
+# 1) 停掉后台服务 / 看门狗 / 菜单栏程序
 pkill -f "claude-usage-peek.*dashboard.py" 2>/dev/null && echo "  · 已停止看板服务" || true
 pkill -f "claude-usage-peek.*watch.py" 2>/dev/null && echo "  · 已停止看门狗" || true
+pkill -f "ClaudeUsageBar" 2>/dev/null && echo "  · 已退出菜单栏程序" || true
 
-# 2) 桌面图标
+# 2) 桌面图标 / 菜单栏 app + 它的语言偏好
 rm -rf "$HOME/Desktop/Claude Usage.app" && echo "  · 已删除桌面图标" || true
+rm -rf "$HOME/Desktop/Claude Usage Bar.app" && echo "  · 已删除菜单栏 app" || true
+defaults delete local.claude-usage-peek.menubar 2>/dev/null && echo "  · 已删除菜单栏语言偏好" || true
 
 # 3) 缓存 + 日志 (只含百分比/日志, 无敏感信息)
 rm -f "$HOME/.claude/usage-peek-quota.json" \
