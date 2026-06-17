@@ -4,7 +4,11 @@
 
 > Built entirely with [Claude Code](https://claude.com/claude-code).
 
-A lightweight, **fully local**, safe menu-bar app for keeping an eye on your Claude usage on macOS.
+A macOS menu-bar app for keeping an eye on your Claude usage.
+
+- **Collects nothing about you** — no tracking, no analytics; nothing about you ever leaves your Mac.
+- **Lightweight** — just a small menu-bar icon; nothing to `pip install`, no background heavy lifting.
+- **Safe** — read-only. It never changes your Claude data.
 
 A 🤖 icon sits in your menu bar showing how much of your 5-hour quota is left.
 Click it for a small panel with your 5h / 7d limits and reset times, or expand it
@@ -48,8 +52,13 @@ into a full HTML dashboard with charts and a usage heatmap.
   - **🔄 Refresh** — re-fetch your official quota
   - **📊 Open dashboard →** — launch the full HTML dashboard in your browser
 - **Right-click** the 🤖 → a small menu: **Refresh quota** / **Open dashboard** /
-  **Language** (English · 中文 · 日本語) / **Quit**.
-- **Change language anytime** via right-click → **Language**. It applies immediately.
+  **Language** / **Quit**.
+
+### Changing the language
+
+You pick a language when you install (default English). To change it later, **right-click
+the 🤖 icon → Language**, then choose **English / 中文 / 日本語**. It switches right away and
+is remembered the next time you open the app — no rebuild needed.
 
 ## What the numbers mean
 
