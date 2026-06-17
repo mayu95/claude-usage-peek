@@ -11,5 +11,9 @@ __pycache__/
 # macOS
 .DS_Store
 
-# 桌面 app 机器相关, 用 make_app.command 各自生成
+# 桌面 app 机器相关, 用 make_app.command / build_menubar.command 各自生成
 *.app/
+
+# 菜单栏 app 的机器相关注入文件 + 编译产物 (build_menubar.command 生成)
+Config.swift
+ClaudeUsageBar
