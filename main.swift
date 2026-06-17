@@ -29,13 +29,10 @@ let STRINGS: [String: [Lang: String]] = [
     "header":      [.en: "Claude Usage",      .zh: "Claude 用量",   .ja: "Claude 使用量"],
     "win5h":       [.en: "5-hour window",     .zh: "5 小时窗口",     .ja: "5時間ウィンドウ"],
     "win7d":       [.en: "7-day window",      .zh: "7 天窗口",       .ja: "7日間ウィンドウ"],
-    // {u}=已用% {t}=重置时刻 {p}=按当前速度到重置时的预计已用%
-    "line1":       [.en: "Used {u}% · resets {t}",
-                    .zh: "已用 {u}% · 预计 {t} 更新",
-                    .ja: "使用 {u}% · {t} にリセット"],
-    "line2":       [.en: "≈ {p}% by reset at this rate",
-                    .zh: "按此速度到时约 {p}%",
-                    .ja: "この調子だとリセット時に約 {p}%"],
+    // {u}=已用% {t}=重置时刻; 后面再拼 " · ≈ {p}%"(按当前速度到重置时的预计已用%)
+    "line1":       [.en: "Used {u}% · reset {t}",
+                    .zh: "已用 {u}% · {t} 更新",
+                    .ja: "使用 {u}% · {t} リセット"],
     "nodata":      [.en: "No data yet — click Refresh", .zh: "暂无数据，点「刷新」拉取", .ja: "データなし —「更新」を押してください"],
     "noquota":     [.en: "No official quota yet (sign in to Claude Code first)",
                     .zh: "还没拿到官方限额（需登录过 Claude Code）",
@@ -155,7 +152,7 @@ final class PanelViewController: NSViewController {
     private let dashButton = NSButton(title: "", target: nil, action: nil)
 
     override func loadView() {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 340))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 270))
 
         header.font = .boldSystemFont(ofSize: 16)
         header.alignment = .center
@@ -164,8 +161,6 @@ final class PanelViewController: NSViewController {
         for d in [detail5h, detail7d] {
             d.font = .systemFont(ofSize: 12)
             d.textColor = .secondaryLabelColor
-            d.maximumNumberOfLines = 2        // 已用行 + 预计行 / used line + projection line
-            d.lineBreakMode = .byWordWrapping
         }
         footer.font = .systemFont(ofSize: 11)
         footer.textColor = .tertiaryLabelColor
@@ -209,7 +204,7 @@ final class PanelViewController: NSViewController {
             stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -18),
         ])
-        for v in [bar5h, bar7d, detail5h, detail7d, refreshButton, dashButton] {
+        for v in [bar5h, bar7d, refreshButton, dashButton] {
             v.widthAnchor.constraint(equalToConstant: 260).isActive = true
         }
         self.view = container
@@ -243,7 +238,7 @@ final class PanelViewController: NSViewController {
             var s = tr("line1").replacingOccurrences(of: "{u}", with: u)
                                .replacingOccurrences(of: "{t}", with: fmtReset(reset))
             if let p = projectedAtReset(used: used, reset: reset, window: window) {
-                s += "\n" + tr("line2").replacingOccurrences(of: "{p}", with: "\(p)")
+                s += " · ≈ \(p)%"
             }
             return s
         }
@@ -294,11 +289,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         RunLoop.main.add(t, forMode: .common)
     }
 
-    /// 用缓存刷新菜单栏标题（显示 5h 已用%） / menu-bar title shows 5h used %
+    /// 用缓存刷新菜单栏标题（显示 5h 剩余%） / menu-bar title shows 5h remaining %
     private func updateTitle() {
         let q = Quota.load()
         if let used = q?.util5h {
-            statusItem.button?.title = "🤖 \(Int(used.rounded()))%"
+            statusItem.button?.title = "🤖 \(max(0, 100 - Int(used.rounded())))%"
         } else {
             statusItem.button?.title = "🤖 ?"
         }
