@@ -48,7 +48,8 @@ into a full HTML dashboard with charts and a usage heatmap.
 
 - **Left-click** the 🤖 → a panel showing:
   - **5-hour window** and **7-day window** progress bars (fill = how much you've used,
-    green → orange → red), the **remaining %**, and the **reset time**
+    green → orange → red), the **used %**, the **reset time**, and a **projection** of
+    where you'll land by reset at the current rate
   - **🔄 Refresh** — re-fetch your official quota
   - **📊 Open dashboard →** — launch the full HTML dashboard in your browser
 - **Right-click** the 🤖 → a small menu: **Refresh quota** / **Open dashboard** /

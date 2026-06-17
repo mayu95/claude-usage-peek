@@ -29,9 +29,13 @@ let STRINGS: [String: [Lang: String]] = [
     "header":      [.en: "Claude Usage",      .zh: "Claude 用量",   .ja: "Claude 使用量"],
     "win5h":       [.en: "5-hour window",     .zh: "5 小时窗口",     .ja: "5時間ウィンドウ"],
     "win7d":       [.en: "7-day window",      .zh: "7 天窗口",       .ja: "7日間ウィンドウ"],
-    "used":        [.en: "Used",              .zh: "已用",          .ja: "使用"],
-    "left":        [.en: "Left",              .zh: "剩",            .ja: "残り"],
-    "reset":       [.en: "Reset",             .zh: "重置",          .ja: "リセット"],
+    // {u}=已用% {t}=重置时刻 {p}=按当前速度到重置时的预计已用%
+    "line1":       [.en: "Used {u}% · resets {t}",
+                    .zh: "已用 {u}% · 预计 {t} 更新",
+                    .ja: "使用 {u}% · {t} にリセット"],
+    "line2":       [.en: "≈ {p}% by reset at this rate",
+                    .zh: "按此速度到时约 {p}%",
+                    .ja: "この調子だとリセット時に約 {p}%"],
     "nodata":      [.en: "No data yet — click Refresh", .zh: "暂无数据，点「刷新」拉取", .ja: "データなし —「更新」を押してください"],
     "noquota":     [.en: "No official quota yet (sign in to Claude Code first)",
                     .zh: "还没拿到官方限额（需登录过 Claude Code）",
@@ -80,10 +84,6 @@ struct Quota {
         )
     }
 
-    func remaining(_ used: Double?) -> Int? {
-        guard let used else { return nil }
-        return max(0, Int((100 - used).rounded()))
-    }
 }
 
 /// epoch 秒 -> "HH:mm"（今天）或 "MM-dd HH:mm"（跨天） / today vs cross-day
@@ -104,6 +104,20 @@ func barColor(_ used: Double?) -> NSColor {
     case ..<85: return .systemOrange
     default: return .systemRed
     }
+}
+
+let WINDOW_5H: Double = 5 * 3600        // 5 小时窗口长度（秒）
+let WINDOW_7D: Double = 7 * 24 * 3600   // 7 天窗口长度（秒）
+
+/// 按窗口内"已过时间"把当前已用% 线性外推到重置时刻 -> 预计已用%。
+/// linear projection: at the current pace, how much of the window will be used by reset.
+/// 窗口刚开始(已过时间太短)或已过重置点时不外推, 返回 nil。
+func projectedAtReset(used: Double?, reset: Int?, window: Double) -> Int? {
+    guard let used, let reset, reset > 0 else { return nil }
+    let remaining = Double(reset) - Date().timeIntervalSince1970
+    let elapsed = window - remaining
+    guard remaining > 0, elapsed > 60 else { return nil }
+    return min(100, max(0, Int((used * window / elapsed).rounded())))
 }
 
 // MARK: - 进度条 / Progress bar
@@ -141,7 +155,7 @@ final class PanelViewController: NSViewController {
     private let dashButton = NSButton(title: "", target: nil, action: nil)
 
     override func loadView() {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 270))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 340))
 
         header.font = .boldSystemFont(ofSize: 16)
         header.alignment = .center
@@ -150,6 +164,8 @@ final class PanelViewController: NSViewController {
         for d in [detail5h, detail7d] {
             d.font = .systemFont(ofSize: 12)
             d.textColor = .secondaryLabelColor
+            d.maximumNumberOfLines = 2        // 已用行 + 预计行 / used line + projection line
+            d.lineBreakMode = .byWordWrapping
         }
         footer.font = .systemFont(ofSize: 11)
         footer.textColor = .tertiaryLabelColor
@@ -191,9 +207,9 @@ final class PanelViewController: NSViewController {
             stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -20),
             stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -18),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -18),
         ])
-        for v in [bar5h, bar7d, refreshButton, dashButton] {
+        for v in [bar5h, bar7d, detail5h, detail7d, refreshButton, dashButton] {
             v.widthAnchor.constraint(equalToConstant: 260).isActive = true
         }
         self.view = container
@@ -221,15 +237,20 @@ final class PanelViewController: NSViewController {
             footer.stringValue = tr("noquota")
             return
         }
-        func line(_ used: Double?, _ reset: Int?) -> String {
-            let rem = q.remaining(used)
+        // 第一行: 已用% + 预计更新时间; 第二行: 按当前速度到重置时的预计已用%
+        func detailText(_ used: Double?, _ reset: Int?, _ window: Double) -> String {
             let u = used == nil ? "?" : String(format: "%.0f", used!)
-            return "\(tr("used")) \(u)% · \(tr("left")) \(rem.map { "\($0)" } ?? "?")% · \(tr("reset")) \(fmtReset(reset))"
+            var s = tr("line1").replacingOccurrences(of: "{u}", with: u)
+                               .replacingOccurrences(of: "{t}", with: fmtReset(reset))
+            if let p = projectedAtReset(used: used, reset: reset, window: window) {
+                s += "\n" + tr("line2").replacingOccurrences(of: "{p}", with: "\(p)")
+            }
+            return s
         }
         bar5h.progress = CGFloat((q.util5h ?? 0) / 100); bar5h.color = barColor(q.util5h)
         bar7d.progress = CGFloat((q.util7d ?? 0) / 100); bar7d.color = barColor(q.util7d)
-        detail5h.stringValue = line(q.util5h, q.reset5h)
-        detail7d.stringValue = line(q.util7d, q.reset7d)
+        detail5h.stringValue = detailText(q.util5h, q.reset5h, WINDOW_5H)
+        detail7d.stringValue = detailText(q.util7d, q.reset7d, WINDOW_7D)
 
         var foot = ""
         if let upd = q.updatedAt, let date = ISO8601DateFormatter().date(from: upd) {
@@ -273,11 +294,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         RunLoop.main.add(t, forMode: .common)
     }
 
-    /// 用缓存刷新菜单栏标题（显示 5h 剩余%） / menu-bar title shows 5h remaining %
+    /// 用缓存刷新菜单栏标题（显示 5h 已用%） / menu-bar title shows 5h used %
     private func updateTitle() {
         let q = Quota.load()
-        if let rem = q?.remaining(q?.util5h) {
-            statusItem.button?.title = "🤖 \(rem)%"
+        if let used = q?.util5h {
+            statusItem.button?.title = "🤖 \(Int(used.rounded()))%"
         } else {
             statusItem.button?.title = "🤖 ?"
         }
