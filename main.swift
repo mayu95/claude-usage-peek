@@ -125,12 +125,22 @@ final class BarView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.height / 2
+        // 轨道底色（淡） / track fill (faint)
         NSColor.separatorColor.withAlphaComponent(0.35).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: r, yRadius: r).fill()
+        // 已用部分 / used portion
         let w = max(bounds.height, bounds.width * min(max(progress, 0), 1))
         color.setFill()
         NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: w, height: bounds.height),
                      xRadius: r, yRadius: r).fill()
+        // 轨道描边：稍深一点点, 跟随系统配色, 让进度条从背景里分出来。
+        // track outline: a touch darker, theme-aware, so the bar stands out from the background.
+        let inset = bounds.insetBy(dx: 0.625, dy: 0.625)
+        let ri = inset.height / 2
+        let border = NSBezierPath(roundedRect: inset, xRadius: ri, yRadius: ri)
+        border.lineWidth = 1.25
+        NSColor.tertiaryLabelColor.withAlphaComponent(0.6).setStroke()
+        border.stroke()
     }
 }
 
