@@ -10,6 +10,9 @@ Keep your Claude **5-hour and 7-day rate-limit quota** one click away in the **m
 and expand a full local **usage dashboard** — token charts, a daily heatmap, and per-model
 breakdown — whenever you want detail.
 
+Unlike CLI token counters, it reads Anthropic's **official** 5h / 7d rate-limit % — your
+real remaining quota — not just a local token tally, and it lives in your menu bar.
+
 <p align="center">
   <img src="docs/claude-usage-menubar.png" width="330"
        alt="Claude Code usage in the macOS menu bar — popover showing 5-hour and 7-day rate-limit quota with reset times">

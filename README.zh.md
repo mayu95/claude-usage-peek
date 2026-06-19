@@ -9,6 +9,9 @@
 把 Claude 的 **5 小时 / 7 天限额(rate limit)**放进**菜单栏**一点即看，需要细节时再展开成完整的
 本地**用量看板**——token 图表、每日热力图、按模型分项。
 
+和命令行的 token 计数器不同，它读取 Anthropic **官方的** 5h / 7d 限额%——你**真实的剩余额度**——
+而不只是本地 token 累加，而且就住在菜单栏里。
+
 <p align="center">
   <img src="docs/claude-usage-menubar.png" width="330"
        alt="macOS 菜单栏里的 Claude Code 用量弹窗 —— 5 小时与 7 天限额、重置时间">
