@@ -17,6 +17,7 @@ fi
 APP="$HOME/Desktop/Claude Usage Bar.app"
 EXEC="ClaudeUsageBar"
 BUNDLE_ID="local.claude-usage-peek.menubar"
+VER="$(tr -d ' \t\n\r' < "$DIR/VERSION" 2>/dev/null)"; [ -z "$VER" ] && VER="0.0.0"
 
 echo "python3 : $PY"
 echo "文件夹  : $DIR"
@@ -47,6 +48,7 @@ cat > Config.swift <<EOF
 // 由 build_menubar.command 自动生成, 勿手改。
 let kPythonPath = "$PY"
 let kProjectDir = "$DIR"
+let kVersion = "$VER"
 EOF
 
 echo "编译中…"
@@ -65,8 +67,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleName</key><string>Claude Usage Bar</string>
     <key>CFBundleDisplayName</key><string>Claude 用量</string>
     <key>CFBundleIdentifier</key><string>local.claude-usage-peek.menubar</string>
-    <key>CFBundleVersion</key><string>1.0</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>CFBundleVersion</key><string>$VER</string>
+    <key>CFBundleShortVersionString</key><string>$VER</string>
     <key>CFBundleExecutable</key><string>$EXEC</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>

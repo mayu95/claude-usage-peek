@@ -26,6 +26,23 @@ func currentLang() -> Lang {
     Lang(rawValue: UserDefaults.standard.string(forKey: "lang") ?? "en") ?? .en
 }
 
+// MARK: - 版本更新检测 / Update check
+
+let kRepoURL = "https://github.com/mayu95/claude-usage-peek"
+let kVersionURL = "https://raw.githubusercontent.com/mayu95/claude-usage-peek/main/VERSION"
+
+/// 语义化比较: remote 是否比 local 新 (按 . 分段比数字)。
+func isVersion(_ remote: String, newerThan local: String) -> Bool {
+    func parts(_ s: String) -> [Int] { s.split(separator: ".").map { Int($0) ?? 0 } }
+    let r = parts(remote), l = parts(local)
+    for i in 0..<max(r.count, l.count) {
+        let rv = i < r.count ? r[i] : 0
+        let lv = i < l.count ? l[i] : 0
+        if rv != lv { return rv > lv }
+    }
+    return false
+}
+
 let STRINGS: [String: [Lang: String]] = [
     "header":      [.en: "Claude Usage",      .zh: "Claude 用量",   .ja: "Claude 使用量"],
     "win5h":       [.en: "5-hour window",     .zh: "5 小时窗口",     .ja: "5時間ウィンドウ"],
@@ -47,6 +64,22 @@ let STRINGS: [String: [Lang: String]] = [
     "menuLang":    [.en: "Language",           .zh: "语言",          .ja: "言語"],
     "login":       [.en: "Start at login",      .zh: "开机自启",      .ja: "ログイン時に起動"],
     "quit":        [.en: "Quit",               .zh: "退出",          .ja: "終了"],
+    "update_menu": [.en: "🔔 Update to {v} →",   .zh: "🔔 更新到 {v} →", .ja: "🔔 {v} に更新 →"],
+    "update_title": [.en: "Claude Usage Bar — update available",
+                     .zh: "Claude 用量 — 有新版本",
+                     .ja: "Claude 使用量 — アップデートあり"],
+    "update_body": [.en: "Version {v} is available. Open the menu → Update.",
+                    .zh: "新版本 {v} 已发布，点菜单栏图标 → 更新。",
+                    .ja: "バージョン {v} が公開。メニュー → 更新。"],
+    "update_toggle": [.en: "Check for updates", .zh: "检查更新", .ja: "アップデートを確認"],
+    "update_ask_title": [.en: "Check for updates automatically?",
+                         .zh: "自动检查更新？",
+                         .ja: "自動でアップデートを確認しますか？"],
+    "update_ask_body": [.en: "When on, the app checks GitHub for a newer version — just a small version-number request, no data about you is sent. Off by default; you can change it anytime from the menu.",
+                        .zh: "开启后，会去 GitHub 查一下有没有新版本——只发一个版本号请求、不发送你的任何数据。默认关闭，随时可在菜单里改。",
+                        .ja: "オンにすると GitHub で新しいバージョンを確認します（バージョン番号の小さなリクエストのみ・あなたのデータは送信しません）。既定はオフで、メニューからいつでも変更できます。"],
+    "enable":      [.en: "Enable", .zh: "开启", .ja: "オンにする"],
+    "not_now":     [.en: "Not now", .zh: "暂不", .ja: "今はしない"],
     "note":        [.en: "Official rate-limit value (whole-% precision); may differ ~1% from the usage page.",
                     .zh: "官方限流值（整数精度），可能与官网用量页差约 1%。",
                     .ja: "公式のレート制限値（整数精度）。使用状況ページと約 1% 異なる場合があります。"],
@@ -288,6 +321,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     private let popover = NSPopover()
     private var panel: PanelViewController!
     private let port = "8787"
+    private var newerVersion: String?   // 远端更新的版本号(仅当比本地新时置位)
 
     func applicationDidFinishLaunching(_ n: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -311,15 +345,71 @@ final class AppController: NSObject, NSApplicationDelegate {
             self?.refreshQuota()
         }
         RunLoop.main.add(t, forMode: .common)
+
+        // 更新检测默认关闭(隐私优先)。首次启动弹一次询问; 开启后才检查, 之后每 6 小时一次。
+        if UserDefaults.standard.object(forKey: "updateCheck") == nil {
+            DispatchQueue.main.async { [weak self] in self?.promptUpdateOptIn() }
+        } else {
+            checkForUpdate()
+        }
+        let ut = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            self?.checkForUpdate()
+        }
+        RunLoop.main.add(ut, forMode: .common)
+    }
+
+    /// 首次启动弹窗询问是否开启自动检查更新(默认不开)。记住选择, 不再弹。
+    private func promptUpdateOptIn() {
+        let a = NSAlert()
+        a.messageText = tr("update_ask_title")
+        a.informativeText = tr("update_ask_body")
+        a.addButton(withTitle: tr("enable"))
+        a.addButton(withTitle: tr("not_now"))
+        NSApp.activate(ignoringOtherApps: true)
+        let on = (a.runModal() == .alertFirstButtonReturn)
+        UserDefaults.standard.set(on, forKey: "updateCheck")
+        if on { checkForUpdate() }
+    }
+
+    /// 拉 GitHub 上的 VERSION 比对本地版本; 有新版则记下并提醒(仅首次)。
+    /// 只 GET 一个版本号小文件, 不发送任何数据; 离线/出错就静默跳过。
+    private func checkForUpdate() {
+        guard UserDefaults.standard.bool(forKey: "updateCheck") else { return }   // 未开启则不检查
+        guard let url = URL(string: kVersionURL) else { return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 10
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        URLSession.shared.dataTask(with: req) { [weak self] data, _, _ in
+            guard let self, let data,
+                  let raw = String(data: data, encoding: .utf8) else { return }
+            let remote = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !remote.isEmpty, remote.allSatisfy({ $0.isNumber || $0 == "." }),
+                  isVersion(remote, newerThan: kVersion) else { return }
+            DispatchQueue.main.async {
+                let firstTime = (self.newerVersion != remote)
+                self.newerVersion = remote
+                self.updateTitle()
+                if firstTime { self.notifyUpdate(remote) }
+            }
+        }.resume()
+    }
+
+    /// 弹一条 macOS 通知(用 osascript, 与项目其它部分一致, 无需额外权限)。
+    private func notifyUpdate(_ v: String) {
+        let title = tr("update_title")
+        let body = tr("update_body").replacingOccurrences(of: "{v}", with: v)
+        run(["/usr/bin/osascript", "-e",
+             "display notification \"\(body)\" with title \"\(title)\""], wait: false)
     }
 
     /// 用缓存刷新菜单栏标题（显示 5h 剩余%） / menu-bar title shows 5h remaining %
     private func updateTitle() {
         let q = Quota.load()
+        let dot = newerVersion != nil ? " •" : ""   // 有更新时加个小圆点
         if let used = q?.util5h {
-            statusItem.button?.title = "🤖 \(max(0, 100 - Int(used.rounded())))%"
+            statusItem.button?.title = "🤖 \(max(0, 100 - Int(used.rounded())))%\(dot)"
         } else {
-            statusItem.button?.title = "🤖 ?"
+            statusItem.button?.title = "🤖 ?\(dot)"
         }
         if popover.isShown { panel.refresh() }
     }
@@ -378,6 +468,14 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
+        // 有新版时, 置顶一条"更新"项
+        if let v = newerVersion {
+            let up = NSMenuItem(title: tr("update_menu").replacingOccurrences(of: "{v}", with: v),
+                                action: #selector(openRepo), keyEquivalent: "")
+            up.target = self
+            menu.addItem(up)
+            menu.addItem(.separator())
+        }
         menu.addItem(withTitle: tr("menuRefresh"), action: #selector(menuRefresh), keyEquivalent: "r").target = self
         menu.addItem(withTitle: tr("menuDash"), action: #selector(menuDash), keyEquivalent: "d").target = self
         menu.addItem(.separator())
@@ -401,6 +499,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
         menu.addItem(loginItem)
 
+        let updItem = NSMenuItem(title: tr("update_toggle"), action: #selector(toggleUpdateCheck), keyEquivalent: "")
+        updItem.target = self
+        updItem.state = UserDefaults.standard.bool(forKey: "updateCheck") ? .on : .off
+        menu.addItem(updItem)
+
         menu.addItem(.separator())
         menu.addItem(withTitle: tr("quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         if let button = statusItem.button {
@@ -410,6 +513,21 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     @objc private func menuRefresh() { refreshQuota() }
     @objc private func menuDash() { openDashboard() }
+    @objc private func openRepo() {
+        if let url = URL(string: kRepoURL) { NSWorkspace.shared.open(url) }
+    }
+
+    /// 开关自动检查更新。开 -> 立刻查一次; 关 -> 清掉更新提示。
+    @objc private func toggleUpdateCheck() {
+        let on = !UserDefaults.standard.bool(forKey: "updateCheck")
+        UserDefaults.standard.set(on, forKey: "updateCheck")
+        if on {
+            checkForUpdate()
+        } else {
+            newerVersion = nil
+            updateTitle()
+        }
+    }
 
     /// 切换"开机自启"。失败(例如需在系统设置里批准)则忽略, 下次打开菜单会反映真实状态。
     @objc private func toggleLogin() {

@@ -54,7 +54,7 @@ into a full HTML dashboard with charts and a usage heatmap.
   - **🔄 Refresh** — re-fetch your official quota
   - **📊 Open dashboard →** — launch the full HTML dashboard in your browser
 - **Right-click** the 🤖 → a small menu: **Refresh quota** / **Open dashboard** /
-  **Language** / **Quit**.
+  **Language** / **Start at login** / **Check for updates** / **Quit**.
 
 ### Changing the language
 
@@ -62,6 +62,15 @@ You pick a language when you install (default English). To change it later, **ri
 the 🤖 icon → Language**, then choose **English / 中文 / 日本語**. It switches right away and
 is remembered the next time you open the app — no rebuild needed. The expanded HTML
 dashboard opens in the selected language too.
+
+### Updates (optional, off by default)
+
+Update checking is **off by default** — for privacy, the app asks once on first launch
+whether to enable it, and you can toggle it anytime via right-click → **Check for updates**.
+When on, the app checks GitHub for a newer version (a tiny version-number request, no data
+about you is sent) and, if there's one, shows a notification, a **•** on the menu-bar icon,
+and an **Update** item in the menu. Clicking it opens the repo; to update, `git pull` and
+re-run `bash build_menubar.command`.
 
 ## What the numbers mean
 
@@ -108,6 +117,8 @@ You can also wire `usage.py` into the Claude Code terminal **statusline** — se
   Claude Code token to read your real quota %. **No third party; the token is never
   written to disk or printed.** Data under `~/.claude/projects` is never modified.
 - The menu-bar app reads only the quota cache (`~/.claude/usage-peek-quota.json`) and
-  launches the bundled Python scripts; it makes no network calls of its own.
+  launches the bundled Python scripts. Its one possible network call is the **optional,
+  off-by-default** update check (a GET of a version number from GitHub, no data sent) —
+  it stays silent unless you turn it on.
 - No third-party dependencies, single-file scripts you can audit: [usage.py](usage.py),
   [quota.py](quota.py).
