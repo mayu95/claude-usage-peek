@@ -42,7 +42,8 @@ into a full HTML dashboard with charts and a usage heatmap.
 
 > Moved the folder? Just run `build_menubar.command` again.
 >
-> To start it automatically at login: **System Settings → General → Login Items**, add the app.
+> Start at login: right-click the 🤖 → **Start at login** (toggles a checkmark). Or add it
+> manually in **System Settings → General → Login Items**.
 
 ## Using the app
 

@@ -16,6 +16,7 @@
 // Requires Config.swift to provide: let kPythonPath: String / let kProjectDir: String
 
 import AppKit
+import ServiceManagement
 
 // MARK: - i18n
 
@@ -44,6 +45,7 @@ let STRINGS: [String: [Lang: String]] = [
     "menuRefresh": [.en: "🔄 Refresh quota",   .zh: "🔄 刷新限额",   .ja: "🔄 利用上限を更新"],
     "menuDash":    [.en: "📊 Open dashboard",  .zh: "📊 展开为看板", .ja: "📊 ダッシュボードを開く"],
     "menuLang":    [.en: "Language",           .zh: "语言",          .ja: "言語"],
+    "login":       [.en: "Start at login",      .zh: "开机自启",      .ja: "ログイン時に起動"],
     "quit":        [.en: "Quit",               .zh: "退出",          .ja: "終了"],
     "note":        [.en: "Official rate-limit value (whole-% precision); may differ ~1% from the usage page.",
                     .zh: "官方限流值（整数精度），可能与官网用量页差约 1%。",
@@ -393,6 +395,12 @@ final class AppController: NSObject, NSApplicationDelegate {
         menu.addItem(langItem)
         menu.setSubmenu(langMenu, for: langItem)
 
+        // 开机自启开关（系统 SMAppService, macOS 13+）
+        let loginItem = NSMenuItem(title: tr("login"), action: #selector(toggleLogin), keyEquivalent: "")
+        loginItem.target = self
+        loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
+        menu.addItem(loginItem)
+
         menu.addItem(.separator())
         menu.addItem(withTitle: tr("quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         if let button = statusItem.button {
@@ -402,6 +410,19 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     @objc private func menuRefresh() { refreshQuota() }
     @objc private func menuDash() { openDashboard() }
+
+    /// 切换"开机自启"。失败(例如需在系统设置里批准)则忽略, 下次打开菜单会反映真实状态。
+    @objc private func toggleLogin() {
+        do {
+            if SMAppService.mainApp.status == .enabled {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+            }
+        } catch {
+            NSLog("login item toggle failed: \(error)")
+        }
+    }
 
     @objc private func pickLang(_ sender: NSMenuItem) {
         guard let code = sender.representedObject as? String else { return }
