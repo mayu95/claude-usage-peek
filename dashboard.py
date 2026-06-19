@@ -15,6 +15,7 @@ from __future__ import annotations
 import html
 import math
 import os
+import subprocess
 import sys
 import time
 import webbrowser
@@ -26,6 +27,96 @@ import quota  # 拉取官方限额%
 
 OUT_DEFAULT = Path(__file__).resolve().parent / "dashboard.html"
 QUOTA_TTL = 300  # 官方额度缓存超过这么多秒(5分钟)才刷新一次, 避免频繁打 API
+
+# ---------------------------------------------------------------------------
+# 多语言 (en / zh / ja) — 与菜单栏 app 一致, 默认英文。
+# 语言来源: 命令行 --lang, 或菜单栏 app 的设置 (defaults), 否则 en。
+# ---------------------------------------------------------------------------
+LANG = "en"
+
+WD = {
+    "zh": ["一", "二", "三", "四", "五", "六", "日"],
+    "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "ja": ["月", "火", "水", "木", "金", "土", "日"],
+}
+
+T = {
+    "title":      {"en": "Claude Code Usage", "zh": "Claude Code 用量看板", "ja": "Claude Code 使用量ダッシュボード"},
+    "h1":         {"en": "🤖 Claude Code Usage", "zh": "🤖 Claude Code 用量看板", "ja": "🤖 Claude Code 使用量ダッシュボード"},
+    "sub_main":   {"en": "Local data · generated {date} · {msgs} messages · {tot} tok total · browser refresh = update official quota now, otherwise every 5 min",
+                   "zh": "本地数据 · 生成于 {date} · 共 {msgs} 条消息 · 累计 {tot} tok · 点浏览器刷新=立即更新官方额度，否则每5分钟",
+                   "ja": "ローカルデータ · 生成 {date} · {msgs} 件のメッセージ · 累計 {tot} tok · ブラウザ更新＝公式上限を即更新、それ以外は5分ごと"},
+    "card_today": {"en": "Today", "zh": "今日 token", "ja": "今日"},
+    "card_week":  {"en": "This week", "zh": "本周 token", "ja": "今週"},
+    "card_month": {"en": "This month", "zh": "本月 token", "ja": "今月"},
+    "card_total": {"en": "All-time", "zh": "累计 token", "ja": "累計"},
+    "cards_note": {"en": "↑ These cards are <b>total processed volume (incl. cache reads)</b> — large. The limit-relevant \"excluding cache\" usage is in the quota panel below.",
+                   "zh": "↑ 这几张卡片是<b>总处理量(含 cache 读取)</b>，体量大；与限额相关的「不含 cache」用量见下方额度面板。",
+                   "ja": "↑ これらのカードは<b>総処理量（キャッシュ読み取り含む）</b>で大きめ。上限に関わる「キャッシュ除外」使用量は下の上限パネルを参照。"},
+    "panel_quota":    {"en": "Quota / recent usage", "zh": "额度 / 近期用量", "ja": "上限 / 最近の使用量"},
+    "panel_heatmap":  {"en": "Daily usage heatmap (since first use, up to a year)", "zh": "每日用量热力图 (自首次使用起, 最多回看一年)", "ja": "日次使用量ヒートマップ（初回使用以降・最大1年）"},
+    "panel_monthly":  {"en": "Daily usage this month ({ym}) · red = over daily budget (20% of weekly limit)", "zh": "本月每日用量 ({ym}) · 红柱=当日超日预期(周限额20%)", "ja": "今月の日次使用量（{ym}）· 赤＝日次目安超過（週上限の20%）"},
+    "panel_hourly":   {"en": "Usage by hour (all dates combined · not just today)", "zh": "各时段用量 (所有日期累计 · 非今日)", "ja": "時間帯別使用量（全期間合算・当日のみではない）"},
+    "panel_models":   {"en": "By model", "zh": "按模型", "ja": "モデル別"},
+    "panel_breakdown": {"en": "Token breakdown", "zh": "Token 分项", "ja": "トークン内訳"},
+    "comp_input":        {"en": "input", "zh": "输入 input", "ja": "入力 input"},
+    "comp_output":       {"en": "output", "zh": "输出 output", "ja": "出力 output"},
+    "comp_cache_read":   {"en": "cache read", "zh": "缓存读 cache read", "ja": "キャッシュ読取 cache read"},
+    "comp_cache_create": {"en": "cache create", "zh": "缓存写 cache create", "ja": "キャッシュ作成 cache create"},
+    "hm_nodata":  {"en": "No usage data yet", "zh": "还没有用量数据", "ja": "使用量データがまだありません"},
+    "hm_less":    {"en": "Less", "zh": "少", "ja": "少"},
+    "hm_more":    {"en": "More", "zh": "多", "ja": "多"},
+    "hm_caption": {"en": "{start} → {today} · {n} days with usage", "zh": "{start} → {today} · {n} 天有用量", "ja": "{start} → {today} · 使用 {n} 日"},
+    "live_prefix": {"en": "Live local stats (incl. cache, processed):", "zh": "本机实时统计 (含 cache, 处理量):", "ja": "ローカル実測（キャッシュ含む・処理量）:"},
+    "live_today": {"en": "Today", "zh": "今日", "ja": "今日"},
+    "live_5h":    {"en": "Last 5 hours", "zh": "最近 5 小时", "ja": "直近5時間"},
+    "live_7d":    {"en": "Last 7 days", "zh": "最近 7 天", "ja": "直近7日"},
+    "win_5h":     {"en": "5-hour window", "zh": "5 小时窗口", "ja": "5時間ウィンドウ"},
+    "win_7d":     {"en": "7-day window", "zh": "7 天窗口", "ja": "7日間ウィンドウ"},
+    "q_official": {"en": "official, used {pct}%", "zh": "官方 已用 {pct}%", "ja": "公式 使用 {pct}%"},
+    "q_estimate": {"en": "estimate ~{pct}% (cap {cap})", "zh": "估算 ~{pct}% (上限 {cap})", "ja": "推定 ~{pct}%（上限 {cap}）"},
+    "q_reset_in": {"en": " · resets in {dur}", "zh": " · 还有 {dur} 重置", "ja": " · あと {dur} でリセット"},
+    "q_pace":     {"en": " · ≈ {pct}% by reset at this rate", "zh": " · 按此速度到时约 {pct}%", "ja": " · この調子だとリセット時に約 {pct}%"},
+    "q_updated":  {"en": ", updated {t}", "zh": "，更新于 {t}", "ja": "、更新 {t}"},
+    "q_note_official": {"en": "The bars are <b>Anthropic official live data</b> (read from response headers by quota.py{upd}), only api.anthropic.com, no third party. The dashboard auto-refreshes every {min} min (tune QUOTA_TTL at the top of dashboard.py).",
+                        "zh": "进度条为 <b>Anthropic 官方实时数据</b>(由 quota.py 读响应头{upd})，只连 api.anthropic.com、不经第三方。看板每 {min} 分钟自动刷新一次(改 dashboard.py 顶部 QUOTA_TTL 可调)。",
+                        "ja": "バーは <b>Anthropic 公式リアルタイムデータ</b>（quota.py がレスポンスヘッダーから取得{upd}）。api.anthropic.com のみ・第三者を経由しません。{min} 分ごとに自動更新（dashboard.py 冒頭の QUOTA_TTL で調整）。"},
+    "q_note_estimate": {"en": "Showing a <b>local estimate</b> (official data unavailable). Run <code>python3 quota.py</code> to fetch official % (needs a valid login token); if expired, sign in to Claude Code once.",
+                        "zh": "当前显示<b>本地估算</b>(官方数据未取到)。运行 <code>python3 quota.py</code> 拉取官方%(需登录令牌有效)；令牌过期时重开一次 Claude Code 登录即可。",
+                        "ja": "<b>ローカル推定</b>を表示中（公式データ未取得）。<code>python3 quota.py</code> で公式%を取得（有効なログイントークンが必要）。期限切れなら Claude Code に再ログイン。"},
+    "over_flag":  {"en": "  ⚠ over daily budget", "zh": "  ⚠超日预期", "ja": "  ⚠日次目安超過"},
+    "mon_tip":    {"en": "{date} ({wd})  volume {v} · limit-relevant {vq} tok{flag}", "zh": "{date} (周{wd})  体量 {v} · 限额相关 {vq} tok{flag}", "ja": "{date}（{wd}）  処理量 {v} · 上限関連 {vq} tok{flag}"},
+}
+
+
+def t(key, **kw):
+    s = T.get(key, {}).get(LANG) or T.get(key, {}).get("en") or key
+    return s.format(**kw) if kw else s
+
+
+def _wd(i):
+    return WD.get(LANG, WD["en"])[i]
+
+
+def _detect_lang(args):
+    """优先 --lang; 否则读菜单栏 app 的语言设置 (macOS defaults); 都没有则 en。"""
+    if "--lang" in args:
+        try:
+            v = args[args.index("--lang") + 1]
+            if v in ("en", "zh", "ja"):
+                return v
+        except IndexError:
+            pass
+    try:
+        v = subprocess.run(
+            ["defaults", "read", "local.claude-usage-peek.menubar", "lang"],
+            capture_output=True, text=True, timeout=3,
+        ).stdout.strip()
+        if v in ("en", "zh", "ja"):
+            return v
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "en"
 
 
 def _refresh_quota(force=False):
@@ -178,7 +269,7 @@ def build_heatmap(per_day) -> str:
     today = datetime.now().astimezone().date()
     used = {d: v for d, v in per_day.items() if v > 0}
     if not used:
-        return '<div class="muted">还没有用量数据</div>'
+        return f'<div class="muted">{t("hm_nodata")}</div>'
 
     # 起点 = max(一年前, 首次使用日), 再对齐到所在周的"周日" (GitHub 风格)
     def to_sunday(d):
@@ -217,17 +308,17 @@ def build_heatmap(per_day) -> str:
         # 补齐到 7 行 (首列可能不是从周一开始, 但我们已对齐到周一)
         for d, v in col_days:
             lvl = level(v)
-            tip = f"{d.isoformat()} ({['一','二','三','四','五','六','日'][d.weekday()]}): {usage._humanize(v)} tok" if v else f"{d.isoformat()}: 0"
+            tip = f"{d.isoformat()} ({_wd(d.weekday())}): {usage._humanize(v)} tok" if v else f"{d.isoformat()}: 0"
             cells.append(f'<div class="hm-cell lvl{lvl}" title="{html.escape(tip)}"></div>')
         col_html.append(f'<div class="hm-col">{"".join(cells)}</div>')
 
     legend = (
-        '<div class="hm-legend">少'
+        f'<div class="hm-legend">{t("hm_less")}'
         + "".join(f'<div class="hm-cell lvl{l}"></div>' for l in range(5))
-        + "多</div>"
+        + f'{t("hm_more")}</div>'
     )
-    caption = (f'<div class="hm-cap muted">{start.isoformat()} → {today.isoformat()} '
-               f'· {len(used)} 天有用量</div>')
+    caption = (f'<div class="hm-cap muted">'
+               f'{t("hm_caption", start=start.isoformat(), today=today.isoformat(), n=len(used))}</div>')
     return (
         '<div class="heatmap">'
         + month_row
@@ -279,10 +370,10 @@ def build_monthly(per_day, per_day_q) -> str:
         vq = per_day_q.get(d, 0)
         over = bool(daily_budget and vq > daily_budget)
         lab = str(day) if (day == 1 or day % 5 == 0 or day == today.day) else ""
-        wd = ["一", "二", "三", "四", "五", "六", "日"][d.weekday()]
-        flag = "  ⚠超日预期" if over else ""
-        tip = (f"{d.isoformat()} (周{wd})  体量 {usage._humanize(v)} · "
-               f"限额相关 {usage._humanize(vq)} tok{flag}")
+        wdl = ("周" if LANG == "zh" else "") + _wd(d.weekday())
+        flag = t("over_flag") if over else ""
+        tip = t("mon_tip", date=d.isoformat(), wd=wdl,
+                v=usage._humanize(v), vq=usage._humanize(vq), flag=flag)
         items.append((lab, v, tip, over))
     return _bar_chart(items)
 
@@ -295,11 +386,23 @@ def _fmt_dur(td) -> str:
     days, rem = divmod(secs, 86400)
     hours, rem = divmod(rem, 3600)
     mins = rem // 60
+    if LANG == "zh":
+        if days:
+            return f"{days}天{hours}小时"
+        if hours:
+            return f"{hours}小时{mins}分"
+        return f"{mins}分"
+    if LANG == "ja":
+        if days:
+            return f"{days}日{hours}時間"
+        if hours:
+            return f"{hours}時間{mins}分"
+        return f"{mins}分"
     if days:
-        return f"{days}天{hours}小时"
+        return f"{days}d {hours}h"
     if hours:
-        return f"{hours}小时{mins}分"
-    return f"{mins}分"
+        return f"{hours}h {mins}m"
+    return f"{mins}m"
 
 
 def build_quota(a) -> str:
@@ -310,35 +413,35 @@ def build_quota(a) -> str:
 
     # (1) 本机实时统计: 今日 / 最近 5 小时 / 最近 7 天 处理量 (含 cache)
     live = (
-        '<div class="quota-live">本机实时统计 (含 cache, 处理量):'
-        f'<span class="lv">今日 <b>{h(a["today"])}</b> tok</span>'
-        f'<span class="lv">最近 5 小时 <b>{h(a["last5h_incl"])}</b> tok</span>'
-        f'<span class="lv">最近 7 天 <b>{h(a["last7d_incl"])}</b> tok</span></div>'
+        f'<div class="quota-live">{t("live_prefix")}'
+        f'<span class="lv">{t("live_today")} <b>{h(a["today"])}</b> tok</span>'
+        f'<span class="lv">{t("live_5h")} <b>{h(a["last5h_incl"])}</b> tok</span>'
+        f'<span class="lv">{t("live_7d")} <b>{h(a["last7d_incl"])}</b> tok</span></div>'
     )
 
     # (2) 进度条: 优先用官方真实% (quota.py 拉的 Anthropic 响应头); 无网/无令牌时退回本地估算
     have_official = bool(lim and lim.get("util5h") is not None)
     rows = []
     specs = (
-        ("5 小时窗口", lim and lim.get("util5h"), lim and lim.get("reset5h"), last5h, CAP_5H, timedelta(hours=5)),
-        ("7 天窗口", lim and lim.get("util7d"), lim and lim.get("reset7d"), last7d, CAP_7D, timedelta(days=7)),
+        (t("win_5h"), lim and lim.get("util5h"), lim and lim.get("reset5h"), last5h, CAP_5H, timedelta(hours=5)),
+        (t("win_7d"), lim and lim.get("util7d"), lim and lim.get("reset7d"), last7d, CAP_7D, timedelta(days=7)),
     )
     for label, official, reset, val, cap, win in specs:
         if official is not None:
             pct = max(0.0, min(100.0, official))
-            head = f"官方 已用 {pct:g}%"
+            head = t("q_official", pct=f"{pct:g}")
         else:
             pct = min(100.0, val / cap * 100) if cap else 0
-            head = f"估算 ~{pct:.0f}% (上限 {h(cap)})"
+            head = t("q_estimate", pct=f"{pct:.0f}", cap=h(cap))
         color = "#3fb950" if pct < 75 else ("#d29922" if pct < 90 else "#f85149")
 
         extra = ""
         if reset and reset > now:
-            extra += f" · 还有 {_fmt_dur(reset - now)} 重置"
+            extra += t("q_reset_in", dur=_fmt_dur(reset - now))
             elapsed = (now - (reset - win)).total_seconds()
             frac = elapsed / win.total_seconds()
             if 0.02 <= frac <= 1 and pct > 0:
-                extra += f" · 按此速度到时约 {min(100.0, pct / frac):.0f}%"
+                extra += t("q_pace", pct=f"{min(100.0, pct / frac):.0f}")
 
         rows.append(
             f'<div class="quota-row">'
@@ -353,14 +456,10 @@ def build_quota(a) -> str:
     notes = ['<div class="muted" style="font-size:11px;margin-top:10px">']
     if have_official:
         upd = lim.get("updated")
-        upd_s = f"，更新于 {upd:%H:%M}" if upd else ""
-        notes.append(f'进度条为 <b>Anthropic 官方实时数据</b>(由 quota.py 读响应头{upd_s})，'
-                     f'只连 api.anthropic.com、不经第三方。看板每 {QUOTA_TTL // 60} 分钟自动刷新一次'
-                     '(改 dashboard.py 顶部 QUOTA_TTL 可调)。')
+        upd_s = t("q_updated", t=f"{upd:%H:%M}") if upd else ""
+        notes.append(t("q_note_official", upd=upd_s, min=QUOTA_TTL // 60))
     else:
-        notes.append('当前显示<b>本地估算</b>(官方数据未取到)。运行 '
-                     '<code>python3 quota.py</code> 拉取官方%(需登录令牌有效)；'
-                     '令牌过期时重开一次 Claude Code 登录即可。')
+        notes.append(t("q_note_estimate"))
     notes.append("</div>")
 
     return live + "".join(rows) + "".join(notes)
@@ -387,19 +486,19 @@ def build_html(force_quota=False) -> str:
     comp_rows = "".join(
         f'<tr><td>{name}</td><td class="num">{h(v)}</td><td class="num muted">{v:,}</td></tr>'
         for name, v in (
-            ("输入 input", c["input"]),
-            ("输出 output", c["output"]),
-            ("缓存读 cache read", c["cache_read"]),
-            ("缓存写 cache create", c["cache_create"]),
+            (t("comp_input"), c["input"]),
+            (t("comp_output"), c["output"]),
+            (t("comp_cache_read"), c["cache_read"]),
+            (t("comp_cache_create"), c["cache_create"]),
         )
     )
 
     return f"""<!DOCTYPE html>
-<html lang="zh">
+<html lang="{LANG}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude Code 用量看板</title>
+<title>{t("title")}</title>
 <style>
   :root {{
     --bg:#0d1117; --panel:#161b22; --border:#30363d; --txt:#e6edf3; --muted:#8b949e;
@@ -465,45 +564,45 @@ def build_html(force_quota=False) -> str:
 <body>
 <div class="grid">
   <div>
-    <h1>🤖 Claude Code 用量看板</h1>
-    <div class="sub">本地数据 · 生成于 {now:%Y-%m-%d %H:%M} · 共 {a['msg_count']} 条消息 · 累计 {h(a['total'])} tok · 点浏览器刷新=立即更新官方额度,否则每5分钟</div>
+    <h1>{t("h1")}</h1>
+    <div class="sub">{t("sub_main", date=f"{now:%Y-%m-%d %H:%M}", msgs=a['msg_count'], tot=h(a['total']))}</div>
   </div>
 
   <div class="cards">
-    {_card(h(a['today']), '今日 token')}
-    {_card(h(a['week']), '本周 token')}
-    {_card(h(a['month']), '本月 token')}
-    {_card(h(a['total']), '累计 token')}
+    {_card(h(a['today']), t("card_today"))}
+    {_card(h(a['week']), t("card_week"))}
+    {_card(h(a['month']), t("card_month"))}
+    {_card(h(a['total']), t("card_total"))}
   </div>
-  <div class="sub" style="margin:-6px 0 0">↑ 这几张卡片是<b>总处理量(含 cache 读取)</b>，体量大；与限额相关的「不含 cache」用量见下方额度面板。</div>
+  <div class="sub" style="margin:-6px 0 0">{t("cards_note")}</div>
 
   <div class="panel">
-    <h2>额度 / 近期用量</h2>
+    <h2>{t("panel_quota")}</h2>
     {build_quota(a)}
   </div>
 
   <div class="panel">
-    <h2>每日用量热力图 (自首次使用起, 最多回看一年)</h2>
+    <h2>{t("panel_heatmap")}</h2>
     {build_heatmap(a['per_day'])}
   </div>
 
   <div class="panel">
-    <h2>本月每日用量 ({now:%Y-%m}) · 红柱=当日超日预期(周限额20%)</h2>
+    <h2>{t("panel_monthly", ym=f"{now:%Y-%m}")}</h2>
     {build_monthly(a['per_day'], a['per_day_q'])}
   </div>
 
   <div class="panel">
-    <h2>各时段用量 (所有日期累计 · 非今日)</h2>
+    <h2>{t("panel_hourly")}</h2>
     {build_hourly(a['per_hour'])}
   </div>
 
   <div class="panel">
-    <h2>按模型</h2>
+    <h2>{t("panel_models")}</h2>
     <table>{model_rows}</table>
   </div>
 
   <div class="panel">
-    <h2>Token 分项</h2>
+    <h2>{t("panel_breakdown")}</h2>
     <table>{comp_rows}</table>
   </div>
 </div>
@@ -549,7 +648,9 @@ def _serve(port: int, open_browser: bool = True):
 
 
 def main():
+    global LANG
     args = sys.argv[1:]
+    LANG = _detect_lang(args)
     if "--serve" in args:
         port = 8787
         if "--port" in args:

@@ -335,7 +335,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         let cmd = """
         pkill -f "dashboard.py --serve --port \(port)" 2>/dev/null; \
         sleep 0.6; \
-        nohup "\(kPythonPath)" "\(kProjectDir)/dashboard.py" --serve --port \(port) --no-open \
+        nohup "\(kPythonPath)" "\(kProjectDir)/dashboard.py" --serve --port \(port) --no-open --lang \(currentLang().rawValue) \
           >> "$HOME/.claude-usage-dash.log" 2>&1 & \
         sleep 1.5; \
         open "http://127.0.0.1:\(port)"

@@ -59,7 +59,8 @@ into a full HTML dashboard with charts and a usage heatmap.
 
 You pick a language when you install (default English). To change it later, **right-click
 the 🤖 icon → Language**, then choose **English / 中文 / 日本語**. It switches right away and
-is remembered the next time you open the app — no rebuild needed.
+is remembered the next time you open the app — no rebuild needed. The expanded HTML
+dashboard opens in the selected language too.
 
 ## What the numbers mean
 
