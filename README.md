@@ -4,7 +4,16 @@
 
 > Built entirely with [Claude Code](https://claude.com/claude-code).
 
-A macOS menu-bar app for keeping an eye on your Claude usage.
+**A lightweight, secure, local macOS menu bar app to see your Claude Code usage.**
+
+Keep your Claude **5-hour and 7-day rate-limit quota** one click away in the **menu bar**,
+and expand a full local **usage dashboard** — token charts, a daily heatmap, and per-model
+breakdown — whenever you want detail.
+
+<p align="center">
+  <img src="docs/claude-usage-menubar.png" width="330"
+       alt="Claude Code usage in the macOS menu bar — popover showing 5-hour and 7-day rate-limit quota with reset times">
+</p>
 
 - **Collects nothing about you** — no tracking, no analytics; nothing about you ever leaves your Mac.
 - **Lightweight** — just a small menu-bar icon; nothing to `pip install`, no background heavy lifting.
@@ -84,6 +93,10 @@ The dashboard is a self-contained HTML page (no JavaScript, no CDN) with cards f
 today / this week / this month / all-time tokens, the official 5h/7d bars with reset
 countdowns, a GitHub-style daily heatmap, an hourly bar chart, and a per-model breakdown.
 Its local server listens on `127.0.0.1` only.
+
+![Claude Code usage dashboard — token cards, 5-hour and 7-day quota bars, and a GitHub-style daily usage heatmap](docs/claude-usage-dashboard.png)
+
+![Claude Code token usage charts — daily usage this month and usage by hour of day](docs/claude-usage-charts.png)
 
 ## Uninstall
 

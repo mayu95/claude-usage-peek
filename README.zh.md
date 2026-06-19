@@ -4,7 +4,15 @@
 
 > 本项目完全用 [Claude Code](https://claude.com/claude-code) 开发。
 
-一个 macOS 菜单栏小工具，随时看一眼你的 Claude 用量。
+**一个轻量、安全、纯本地的 macOS 菜单栏小工具，随时查看 Claude Code 用量。**
+
+把 Claude 的 **5 小时 / 7 天限额(rate limit)**放进**菜单栏**一点即看，需要细节时再展开成完整的
+本地**用量看板**——token 图表、每日热力图、按模型分项。
+
+<p align="center">
+  <img src="docs/claude-usage-menubar.png" width="330"
+       alt="macOS 菜单栏里的 Claude Code 用量弹窗 —— 5 小时与 7 天限额、重置时间">
+</p>
 
 - **不获取你的任何信息** —— 不追踪、不做分析；你的任何信息都不会离开这台 Mac。
 - **轻量** —— 就一个小小的菜单栏图标；无需 `pip install`，后台不做重活。
@@ -74,6 +82,10 @@
 看板是一个自包含的 HTML 页面（无 JavaScript、无 CDN）：今日 / 本周 / 本月 / 累计 token
 卡片、官方 5h/7d 限额条（带重置倒计时）、GitHub 式每日热力图、按小时柱状图、按模型分项。
 它的本地服务只监听 `127.0.0.1`，仅本机可访问。
+
+![Claude Code 用量看板 —— token 卡片、5 小时与 7 天限额条、GitHub 式每日用量热力图](docs/claude-usage-dashboard.png)
+
+![Claude Code token 用量图表 —— 本月每日用量与按小时分布](docs/claude-usage-charts.png)
 
 ## 卸载
 
