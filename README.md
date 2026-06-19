@@ -43,7 +43,11 @@ into a full HTML dashboard with charts and a usage heatmap.
 
 ## Install
 
-1. **Download this folder** (clone or download the ZIP).
+1. **Download this folder** — clone it (or download the ZIP from the green **Code** button):
+   ```bash
+   git clone https://github.com/mayu95/claude-usage-peek.git
+   cd claude-usage-peek
+   ```
 2. **Build the app** — double-click `build_menubar.command` in Finder, or in Terminal:
    ```bash
    bash build_menubar.command

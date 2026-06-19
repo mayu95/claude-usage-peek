@@ -42,7 +42,11 @@ HTML ダッシュボードに展開できます。
 
 ## インストール
 
-1. **このフォルダをダウンロード**（clone または ZIP）。
+1. **このフォルダをダウンロード** —— clone（または緑色の **Code** ボタンから ZIP）：
+   ```bash
+   git clone https://github.com/mayu95/claude-usage-peek.git
+   cd claude-usage-peek
+   ```
 2. **app をビルド** —— Finder で `build_menubar.command` をダブルクリック、または
    ターミナルで：
    ```bash

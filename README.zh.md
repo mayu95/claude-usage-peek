@@ -39,7 +39,11 @@
 
 ## 安装
 
-1. **下载本文件夹**（clone 或下载 ZIP）。
+1. **下载本文件夹** —— clone（或点绿色 **Code** 按钮下载 ZIP）：
+   ```bash
+   git clone https://github.com/mayu95/claude-usage-peek.git
+   cd claude-usage-peek
+   ```
 2. **编译 app** —— 在访达里双击 `build_menubar.command`，或在终端运行：
    ```bash
    bash build_menubar.command
