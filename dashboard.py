@@ -561,8 +561,8 @@ def build_html(force_quota=False) -> str:
   .bcol {{ flex:1; min-width:0; display:flex; flex-direction:column;
     justify-content:flex-end; align-items:center; height:100%; }}
   .bnum {{ font-size:8px; line-height:1.1; color:var(--muted); white-space:nowrap; margin-bottom:2px; }}
-  .bbar {{ width:72%; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; }}
-  .bbar.over {{ background:#f85149; }}  /* 超日预期 */
+  .bbar {{ width:72%; background:var(--accent); border-radius:3px 3px 0 0; min-height:2px; opacity:.85; }}
+  .bbar.over {{ background:#f85149; opacity:1; }}  /* 超日预期: 红色保持醒目 */
   .blbl {{ font-size:10px; color:var(--muted); margin-top:3px; height:14px; }}
 </style>
 </head>
