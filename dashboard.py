@@ -55,7 +55,7 @@ T = {
                    "ja": "↑ これらのカードは<b>総処理量（キャッシュ読み取り含む）</b>で大きめ。上限に関わる「キャッシュ除外」使用量は下の上限パネルを参照。"},
     "panel_quota":    {"en": "Quota / recent usage", "zh": "额度 / 近期用量", "ja": "上限 / 最近の使用量"},
     "panel_heatmap":  {"en": "Daily usage heatmap (since first use, up to a year)", "zh": "每日用量热力图 (自首次使用起, 最多回看一年)", "ja": "日次使用量ヒートマップ（初回使用以降・最大1年）"},
-    "panel_monthly":  {"en": "Daily usage this month ({ym}) · red = over daily budget (20% of weekly limit)", "zh": "本月每日用量 ({ym}) · 红柱=当日超日预期(周限额20%)", "ja": "今月の日次使用量（{ym}）· 赤＝日次目安超過（週上限の20%）"},
+    "panel_monthly":  {"en": "Daily usage — last 30 days · red = over daily budget (20% of weekly limit)", "zh": "近 30 天每日用量 · 红柱=当日超日预期(周限额20%)", "ja": "直近30日の日次使用量 · 赤＝日次目安超過（週上限の20%）"},
     "panel_hourly":   {"en": "Usage by hour (all dates combined · not just today)", "zh": "各时段用量 (所有日期累计 · 非今日)", "ja": "時間帯別使用量（全期間合算・当日のみではない）"},
     "panel_models":   {"en": "By model", "zh": "按模型", "ja": "モデル別"},
     "panel_breakdown": {"en": "Token breakdown", "zh": "Token 分项", "ja": "トークン内訳"},
@@ -358,18 +358,23 @@ def build_hourly(per_hour) -> str:
     return _bar_chart(items)
 
 
-def build_monthly(per_day, per_day_q) -> str:
-    """本月 1 号到今天, 每天一根柱。柱高=含cache体量; 当日"不含cache"用量超过
-    日预期(周限额 CAP_7D 的 20%)时, 该柱标红。"""
+def build_daily(per_day, per_day_q) -> str:
+    """近 30 天每天一根柱(数据不足 30 天则自首次使用日起)。柱高=含cache体量;
+    当日"不含cache"用量超过日预期(周限额 CAP_7D 的 20%)时, 该柱标红。"""
     today = datetime.now().astimezone().date()
+    used_days = [d for d, v in per_day.items() if v > 0]
+    first_use = min(used_days) if used_days else today
+    start = max(today - timedelta(days=29), first_use)   # 近30天, 不足则从首日
+    total = (today - start).days + 1
     daily_budget = CAP_7D * EXPECTED_DAILY_FRAC if CAP_7D else 0  # 不含cache的日预期
     items = []
-    for day in range(1, today.day + 1):
-        d = today.replace(day=day)
+    for i in range(total):
+        d = start + timedelta(days=i)
         v = per_day.get(d, 0)
         vq = per_day_q.get(d, 0)
         over = bool(daily_budget and vq > daily_budget)
-        lab = str(day) if (day == 1 or day % 5 == 0 or day == today.day) else ""
+        # 标签: 起点 / 每5天 / 今天 标 月/日(跨月也清楚); 其余空
+        lab = f"{d.month}/{d.day}" if (i == 0 or i % 5 == 0 or d == today) else ""
         wdl = ("周" if LANG == "zh" else "") + _wd(d.weekday())
         flag = t("over_flag") if over else ""
         tip = t("mon_tip", date=d.isoformat(), wd=wdl,
@@ -587,8 +592,8 @@ def build_html(force_quota=False) -> str:
   </div>
 
   <div class="panel">
-    <h2>{t("panel_monthly", ym=f"{now:%Y-%m}")}</h2>
-    {build_monthly(a['per_day'], a['per_day_q'])}
+    <h2>{t("panel_monthly")}</h2>
+    {build_daily(a['per_day'], a['per_day_q'])}
   </div>
 
   <div class="panel">
