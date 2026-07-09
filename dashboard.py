@@ -149,7 +149,6 @@ CAP_5H = 5_800_000        # ~5.8M token / 5 小时 (不含 cache 读取)
 CAP_7D = 77_600_000       # ~77.6M token / 7 天 (不含 cache 读取)
 # 日预期 = 周限额的多少 (5 个工作日均摊 -> 每天 20%); 某天超过则在月图标红
 EXPECTED_DAILY_FRAC = 0.20
-DAILY_ALERT_FRAC = 0.40   # 某天用掉周限额这么多就弹窗 (= 2 倍日均)
 
 
 # ---------------------------------------------------------------------------
@@ -485,11 +484,11 @@ def build_html(force_quota=False) -> str:
     now = datetime.now().astimezone()
     h = usage._humanize
 
-    models = [(m, t) for m, t in sorted(a["per_model"].items(), key=lambda x: -x[1]) if t > 0]
+    models = [(m, tok) for m, tok in sorted(a["per_model"].items(), key=lambda x: -x[1]) if tok > 0]
     model_rows = "".join(
-        f'<tr><td>{html.escape(m)}</td><td class="num">{h(t)}</td>'
-        f'<td class="num muted">{t:,}</td></tr>'
-        for m, t in models
+        f'<tr><td>{html.escape(m)}</td><td class="num">{h(tok)}</td>'
+        f'<td class="num muted">{tok:,}</td></tr>'
+        for m, tok in models
     )
 
     c = a["comp"]

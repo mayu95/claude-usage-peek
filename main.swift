@@ -430,16 +430,20 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     /// 弹一条 macOS 通知(用 osascript, 与项目其它部分一致, 无需额外权限)。
+    /// title/body 里的反斜杠和双引号先转义, 防止(如模型名含特殊字符时)破坏 AppleScript 字符串。
     private func notify(_ title: String, _ body: String) {
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        }
         run(["/usr/bin/osascript", "-e",
-             "display notification \"\(body)\" with title \"\(title)\""], wait: false)
+             "display notification \"\(esc(body))\" with title \"\(esc(title))\""], wait: false)
     }
 
     private func notifyUpdate(_ v: String) {
         notify(tr("update_title"), tr("update_body").replacingOccurrences(of: "{v}", with: v))
     }
 
-    // 限额提醒(默认开): 针对模型周限额(如 Fable)。总量档位边沿触发 + 单日增量>20 点。
+    // 限额提醒档位(默认开): 5h / 7d / 模型周限额通用, 边沿触发, 到档才弹一次。
     private let alertThresholds = [50, 75, 80, 85, 90, 95, 100]
 
     private func dayString() -> String {
@@ -469,7 +473,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         let pct = Int(util.rounded())
         let k = "alertLevel_" + key
         var alerted = d.integer(forKey: k)
-        if pct < alerted { alerted = 0 }
+        // 重新武装(带 5 点滞回): 只有明显掉下去(如窗口重置)才把已提醒档位降下来,
+        // 避免滚动的 5h 窗口在阈值附近小幅抖动(76→74→76)反复弹。
+        if Double(alerted) - util >= 5 {
+            alerted = alertThresholds.filter { $0 <= pct }.max() ?? 0
+        }
         if let top = alertThresholds.filter({ $0 <= pct && $0 > alerted }).max() {
             notify(tr("alert_title"),
                    tr("alert_level").replacingOccurrences(of: "{label}", with: label)
