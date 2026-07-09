@@ -54,6 +54,41 @@ def _get_token() -> str | None:
     return None
 
 
+def _iso_to_epoch(s):
+    """ISO 时间字符串 -> epoch 秒 (int)。失败返回 None。"""
+    if not s:
+        return None
+    try:
+        return int(datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp())
+    except (ValueError, TypeError):
+        return None
+
+
+def _fetch_scoped(tok):
+    """GET /api/oauth/usage, 取 kind==weekly_scoped 的限额 (某模型的周限额, 如 Fable)。
+    这是 Claude Code /status 用的官方接口, 纯 GET、不消耗额度。
+    标签取自 API 的 scope.model.display_name —— 模型改名时会自动跟随。
+    返回 {"label", "utilization", "resetAt"} 或 None; 任何错误都吞掉, 不影响主流程。"""
+    try:
+        req = urllib.request.Request("https://api.anthropic.com/api/oauth/usage", method="GET")
+        req.add_header("authorization", f"Bearer {tok}")
+        req.add_header("anthropic-version", "2023-06-01")
+        req.add_header("anthropic-beta", "oauth-2025-04-20")
+        req.add_header("accept", "application/json")
+        data = json.loads(urllib.request.urlopen(req, timeout=30).read())
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError, json.JSONDecodeError, ValueError):
+        return None
+    for lim in data.get("limits") or []:
+        if lim.get("kind") == "weekly_scoped" and lim.get("percent") is not None:
+            model = (lim.get("scope") or {}).get("model") or {}
+            return {
+                "label": model.get("display_name"),
+                "utilization": float(lim["percent"]),
+                "resetAt": _iso_to_epoch(lim.get("resets_at")),
+            }
+    return None
+
+
 def fetch() -> dict | None:
     """请求 Anthropic, 解析 ratelimit 头。成功返回 dict 并写缓存; 失败返回 None。"""
     tok = _get_token()
@@ -109,6 +144,8 @@ def fetch() -> dict | None:
             "reset7dAt": hi("anthropic-ratelimit-unified-7d-reset"),
             "limitStatus": headers.get("anthropic-ratelimit-unified-status"),
         },
+        # 某模型的周限额(如 Fable), 来自 /api/oauth/usage; 无此限额或取不到则 None
+        "scopedWeekly": _fetch_scoped(tok),
     }
     try:
         CACHE.write_text(json.dumps(out, ensure_ascii=False, indent=2))
@@ -134,6 +171,9 @@ def main():
     print("官方实时额度 (来自 Anthropic 响应头):")
     print(f"  5 小时窗口: 已用 {u['utilization5h']}%  · 重置 {fmt_reset(u['reset5hAt'])}")
     print(f"  7 天窗口:   已用 {u['utilization7d']}%  · 重置 {fmt_reset(u['reset7dAt'])}")
+    sw = data.get("scopedWeekly")
+    if sw:
+        print(f"  {sw.get('label') or '模型'} 周限额: 已用 {sw['utilization']:g}%  · 重置 {fmt_reset(sw.get('resetAt'))}")
     print(f"  状态: {u['limitStatus']}  · 已写入 {CACHE}")
 
 

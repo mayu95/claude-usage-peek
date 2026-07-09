@@ -83,6 +83,7 @@ let STRINGS: [String: [Lang: String]] = [
     "note":        [.en: "Official rate-limit value (whole-% precision); may differ ~1% from the usage page.",
                     .zh: "官方限流值（整数精度），可能与官网用量页差约 1%。",
                     .ja: "公式のレート制限値（整数精度）。使用状況ページと約 1% 異なる場合があります。"],
+    "win_scoped":  [.en: "Model weekly limit", .zh: "模型周限额", .ja: "モデル週間上限"],
 ]
 
 func tr(_ key: String) -> String {
@@ -100,6 +101,9 @@ struct Quota {
     var reset7d: Int?
     var status: String?
     var updatedAt: String?
+    var scopedLabel: String?   // 某模型周限额的名字(如 Fable), 来自 API
+    var scopedUtil: Double?    // 已用百分比
+    var scopedReset: Int?      // epoch 秒
 
     static let cacheURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".claude/usage-peek-quota.json")
@@ -109,13 +113,17 @@ struct Quota {
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
         let u = obj["usageData"] as? [String: Any] ?? [:]
+        let sw = obj["scopedWeekly"] as? [String: Any] ?? [:]
         func d(_ k: String) -> Double? { (u[k] as? NSNumber)?.doubleValue }
         func i(_ k: String) -> Int? { (u[k] as? NSNumber)?.intValue }
         return Quota(
             util5h: d("utilization5h"), util7d: d("utilization7d"),
             reset5h: i("reset5hAt"), reset7d: i("reset7dAt"),
             status: u["limitStatus"] as? String,
-            updatedAt: obj["updatedAt"] as? String
+            updatedAt: obj["updatedAt"] as? String,
+            scopedLabel: sw["label"] as? String,
+            scopedUtil: (sw["utilization"] as? NSNumber)?.doubleValue,
+            scopedReset: (sw["resetAt"] as? NSNumber)?.intValue
         )
     }
 
@@ -195,19 +203,24 @@ final class PanelViewController: NSViewController {
     private let title7d = NSTextField(labelWithString: "")
     private let bar7d = BarView()
     private let detail7d = NSTextField(labelWithString: "")
+    // 某模型周限额(如 Fable): 有则显示, 无则整段隐藏
+    private let title3 = NSTextField(labelWithString: "")
+    private let bar3 = BarView()
+    private let detail3 = NSTextField(labelWithString: "")
+    private var scopedSection: NSStackView!
     private let footer = NSTextField(labelWithString: "")
     private let note = NSTextField(labelWithString: "")
     private let refreshButton = NSButton(title: "", target: nil, action: nil)
     private let dashButton = NSButton(title: "", target: nil, action: nil)
 
     override func loadView() {
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 310))
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 380))
 
         header.font = .boldSystemFont(ofSize: 16)
         header.alignment = .center
 
-        for t in [title5h, title7d] { t.font = .boldSystemFont(ofSize: 13) }
-        for d in [detail5h, detail7d] {
+        for t in [title5h, title7d, title3] { t.font = .boldSystemFont(ofSize: 13) }
+        for d in [detail5h, detail7d, detail3] {
             d.font = .systemFont(ofSize: 12)
             d.textColor = .secondaryLabelColor
         }
@@ -221,7 +234,7 @@ final class PanelViewController: NSViewController {
         note.maximumNumberOfLines = 0
         note.lineBreakMode = .byWordWrapping
 
-        for b in [bar5h, bar7d] {
+        for b in [bar5h, bar7d, bar3] {
             b.translatesAutoresizingMaskIntoConstraints = false
             b.heightAnchor.constraint(equalToConstant: 12).isActive = true
         }
@@ -240,10 +253,12 @@ final class PanelViewController: NSViewController {
             return s
         }
 
+        scopedSection = section(title3, bar3, detail3)
         let stack = NSStackView(views: [
             header,
             section(title5h, bar5h, detail5h),
             section(title7d, bar7d, detail7d),
+            scopedSection,
             footer,
             refreshButton,
             dashButton,
@@ -260,7 +275,7 @@ final class PanelViewController: NSViewController {
             stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 18),
             stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -18),
         ])
-        for v in [bar5h, bar7d, refreshButton, dashButton, note] {
+        for v in [bar5h, bar7d, bar3, refreshButton, dashButton, note] {
             v.widthAnchor.constraint(equalToConstant: 260).isActive = true
         }
         self.view = container
@@ -286,6 +301,7 @@ final class PanelViewController: NSViewController {
             detail5h.stringValue = tr("nodata")
             detail7d.stringValue = ""
             bar5h.progress = 0; bar7d.progress = 0
+            scopedSection.isHidden = true
             footer.stringValue = tr("noquota")
             return
         }
@@ -303,6 +319,16 @@ final class PanelViewController: NSViewController {
         bar7d.progress = CGFloat((q.util7d ?? 0) / 100); bar7d.color = barColor(q.util7d)
         detail5h.stringValue = detailText(q.util5h, q.reset5h, WINDOW_5H)
         detail7d.stringValue = detailText(q.util7d, q.reset7d, WINDOW_7D)
+
+        // 某模型周限额(如 Fable): 有数据才显示; 标签用 API 给的名字(改名自动跟随)
+        if let su = q.scopedUtil {
+            scopedSection.isHidden = false
+            title3.stringValue = q.scopedLabel ?? tr("win_scoped")
+            bar3.progress = CGFloat(su / 100); bar3.color = barColor(su)
+            detail3.stringValue = detailText(su, q.scopedReset, WINDOW_7D)
+        } else {
+            scopedSection.isHidden = true
+        }
 
         var foot = ""
         if let upd = q.updatedAt, let date = ISO8601DateFormatter().date(from: upd) {
@@ -335,6 +361,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         panel.dashboardAction = { [weak self] in self?.openDashboard() }
         popover.contentViewController = panel
         popover.behavior = .transient
+        _ = panel.view   // 强制先跑 loadView, 保证面板控件(如 scopedSection)已建, 之后 refresh 都安全
 
         updateTitle()
         refreshQuota()  // 启动先拉一次 / fetch once on launch

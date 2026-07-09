@@ -73,6 +73,7 @@ T = {
     "live_7d":    {"en": "Last 7 days", "zh": "最近 7 天", "ja": "直近7日"},
     "win_5h":     {"en": "5-hour window", "zh": "5 小时窗口", "ja": "5時間ウィンドウ"},
     "win_7d":     {"en": "7-day window", "zh": "7 天窗口", "ja": "7日間ウィンドウ"},
+    "win_scoped": {"en": "Model weekly limit", "zh": "模型周限额", "ja": "モデル週間上限"},
     "q_official": {"en": "official, used {pct}%", "zh": "官方 已用 {pct}%", "ja": "公式 使用 {pct}%"},
     "q_estimate": {"en": "estimate ~{pct}% (cap {cap})", "zh": "估算 ~{pct}% (上限 {cap})", "ja": "推定 ~{pct}%（上限 {cap}）"},
     "q_reset_in": {"en": " · resets in {dur}", "zh": " · 还有 {dur} 重置", "ja": " · あと {dur} でリセット"},
@@ -427,10 +428,14 @@ def build_quota(a) -> str:
     # (2) 进度条: 优先用官方真实% (quota.py 拉的 Anthropic 响应头); 无网/无令牌时退回本地估算
     have_official = bool(lim and lim.get("util5h") is not None)
     rows = []
-    specs = (
+    specs = [
         (t("win_5h"), lim and lim.get("util5h"), lim and lim.get("reset5h"), last5h, CAP_5H, timedelta(hours=5)),
         (t("win_7d"), lim and lim.get("util7d"), lim and lim.get("reset7d"), last7d, CAP_7D, timedelta(days=7)),
-    )
+    ]
+    # 某模型的周限额(如 Fable): 官方数据, 标签取自 API(改名自动跟随); 无则不显示
+    if lim and lim.get("scopedUtil") is not None:
+        specs.append((lim.get("scopedLabel") or t("win_scoped"), lim.get("scopedUtil"),
+                      lim.get("scopedReset"), 0, None, timedelta(days=7)))
     for label, official, reset, val, cap, win in specs:
         if official is not None:
             pct = max(0.0, min(100.0, official))

@@ -129,7 +129,7 @@ def read_limits():
         except ValueError:
             updated = None
 
-    return {
+    out = {
         "util5h": u.get("utilization5h"),
         "util7d": u.get("utilization7d"),
         "reset5h": _ts("reset5hAt"),
@@ -137,6 +137,18 @@ def read_limits():
         "status": u.get("limitStatus"),
         "updated": updated,
     }
+    # 某模型的周限额(如 Fable), 来自 /api/oauth/usage; 无则不加
+    sw = data.get("scopedWeekly")
+    if sw and sw.get("utilization") is not None:
+        r = sw.get("resetAt")
+        try:
+            sw_reset = datetime.fromtimestamp(int(r)).astimezone() if r else None
+        except (ValueError, OSError, OverflowError):
+            sw_reset = None
+        out["scopedLabel"] = sw.get("label")
+        out["scopedUtil"] = sw.get("utilization")
+        out["scopedReset"] = sw_reset
+    return out
 
 
 def _fmt_remaining(util, reset, now):
