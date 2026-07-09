@@ -72,7 +72,7 @@ into a full HTML dashboard with charts and a usage heatmap.
   - **🔄 Refresh** — re-fetch your official quota
   - **📊 Open dashboard →** — launch the full HTML dashboard in your browser
 - **Right-click** the 🤖 → a small menu: **Refresh quota** / **Open dashboard** /
-  **Language** / **Start at login** / **Check for updates** / **Quit**.
+  **Language** / **Start at login** / **Check for updates** / **Usage alerts** / **Quit**.
 
 ### Changing the language
 
@@ -89,6 +89,14 @@ When on, the app checks GitHub for a newer version (a tiny version-number reques
 about you is sent) and, if there's one, shows a notification, a **•** on the menu-bar icon,
 and an **Update** item in the menu. Clicking it opens the repo; to update, `git pull` and
 re-run `bash build_menubar.command`.
+
+### Usage alerts
+
+If your plan has a **per-model weekly limit** (e.g. Fable), the app pops a notification
+when it crosses **50%**, **75%**, then **every +5%** (80/85/90/95/100), and once a day if
+you burn **more than 20%** of that weekly limit in a single day. Edge-triggered (one ping
+per threshold, no spam) and re-armed after the weekly reset. On by default; toggle it via
+right-click → **Usage alerts**.
 
 ## What the numbers mean
 

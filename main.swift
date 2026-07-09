@@ -84,6 +84,14 @@ let STRINGS: [String: [Lang: String]] = [
                     .zh: "官方限流值（整数精度），可能与官网用量页差约 1%。",
                     .ja: "公式のレート制限値（整数精度）。使用状況ページと約 1% 異なる場合があります。"],
     "win_scoped":  [.en: "Model weekly limit", .zh: "模型周限额", .ja: "モデル週間上限"],
+    "alerts_toggle": [.en: "Usage alerts", .zh: "限额提醒", .ja: "使用量アラート"],
+    "alert_title": [.en: "Claude usage alert", .zh: "Claude 用量提醒", .ja: "Claude 使用量アラート"],
+    "alert_level": [.en: "{label} weekly limit — {p}% used",
+                    .zh: "{label} 周限额已用 {p}%",
+                    .ja: "{label} 週間上限 {p}% 使用"],
+    "alert_daily": [.en: "Heavy {label} use today — over 20% of the weekly limit",
+                    .zh: "今天 {label} 用量偏高 —— 已超周限额的 20%",
+                    .ja: "本日の {label} 使用が多め —— 週間上限の20%超"],
 ]
 
 func tr(_ key: String) -> String {
@@ -422,11 +430,53 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     /// 弹一条 macOS 通知(用 osascript, 与项目其它部分一致, 无需额外权限)。
-    private func notifyUpdate(_ v: String) {
-        let title = tr("update_title")
-        let body = tr("update_body").replacingOccurrences(of: "{v}", with: v)
+    private func notify(_ title: String, _ body: String) {
         run(["/usr/bin/osascript", "-e",
              "display notification \"\(body)\" with title \"\(title)\""], wait: false)
+    }
+
+    private func notifyUpdate(_ v: String) {
+        notify(tr("update_title"), tr("update_body").replacingOccurrences(of: "{v}", with: v))
+    }
+
+    // 限额提醒(默认开): 针对模型周限额(如 Fable)。总量档位边沿触发 + 单日增量>20 点。
+    private let alertThresholds = [50, 75, 80, 85, 90, 95, 100]
+
+    private func dayString() -> String {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
+
+    /// 检查模型周限额, 越过档位 / 单日涨幅过大时弹通知。默认开, 菜单可关。
+    private func checkAlerts(_ q: Quota) {
+        let d = UserDefaults.standard
+        guard (d.object(forKey: "alerts") as? Bool) ?? true else { return }
+        guard let util = q.scopedUtil else { return }
+        let label = q.scopedLabel ?? tr("win_scoped")
+        let pct = Int(util.rounded())
+
+        // 总量档位: 跨过新档位才弹一次; 掉下来(周重置)则重新武装
+        var alerted = d.integer(forKey: "fableAlertLevel")
+        if pct < alerted { alerted = 0 }
+        if let top = alertThresholds.filter({ $0 <= pct && $0 > alerted }).max() {
+            notify(tr("alert_title"),
+                   tr("alert_level").replacingOccurrences(of: "{label}", with: label)
+                                    .replacingOccurrences(of: "{p}", with: "\(pct)"))
+            alerted = top
+        }
+        d.set(alerted, forKey: "fableAlertLevel")
+
+        // 单日增量: 记当天起点%, 当天涨幅超过 20 个百分点提醒一次; 跨天重置基线
+        if d.string(forKey: "fableDayDate") != dayString() {
+            d.set(dayString(), forKey: "fableDayDate")
+            d.set(util, forKey: "fableDayBase")
+            d.set(false, forKey: "fableDailyAlerted")
+        }
+        if util - d.double(forKey: "fableDayBase") >= 20, !d.bool(forKey: "fableDailyAlerted") {
+            notify(tr("alert_title"),
+                   tr("alert_daily").replacingOccurrences(of: "{label}", with: label))
+            d.set(true, forKey: "fableDailyAlerted")
+        }
     }
 
     /// 用缓存刷新菜单栏标题（显示 5h 剩余%） / menu-bar title shows 5h remaining %
@@ -438,6 +488,7 @@ final class AppController: NSObject, NSApplicationDelegate {
         } else {
             statusItem.button?.title = "🤖 ?\(dot)"
         }
+        if let q { checkAlerts(q) }
         if popover.isShown { panel.refresh() }
     }
 
@@ -531,6 +582,11 @@ final class AppController: NSObject, NSApplicationDelegate {
         updItem.state = UserDefaults.standard.bool(forKey: "updateCheck") ? .on : .off
         menu.addItem(updItem)
 
+        let alertsItem = NSMenuItem(title: tr("alerts_toggle"), action: #selector(toggleAlerts), keyEquivalent: "")
+        alertsItem.target = self
+        alertsItem.state = ((UserDefaults.standard.object(forKey: "alerts") as? Bool) ?? true) ? .on : .off
+        menu.addItem(alertsItem)
+
         menu.addItem(.separator())
         menu.addItem(withTitle: tr("quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         if let button = statusItem.button {
@@ -554,6 +610,12 @@ final class AppController: NSObject, NSApplicationDelegate {
             newerVersion = nil
             updateTitle()
         }
+    }
+
+    /// 开关限额提醒(默认开)。
+    @objc private func toggleAlerts() {
+        let on = !((UserDefaults.standard.object(forKey: "alerts") as? Bool) ?? true)
+        UserDefaults.standard.set(on, forKey: "alerts")
     }
 
     /// 切换"开机自启"。失败(例如需在系统设置里批准)则忽略, 下次打开菜单会反映真实状态。
