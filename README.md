@@ -67,6 +67,8 @@ into a full HTML dashboard with charts and a usage heatmap.
   - **5-hour window** and **7-day window** progress bars (fill = how much you've used,
     green → orange → red), the **used %**, the **reset time**, and a **projection** of
     where you'll land by reset at the current rate
+  - if your plan has a **per-model weekly limit** (e.g. **Fable**), a bar for that too —
+    the model name comes straight from Anthropic, so it follows any rename automatically
   - **🔄 Refresh** — re-fetch your official quota
   - **📊 Open dashboard →** — launch the full HTML dashboard in your browser
 - **Right-click** the 🤖 → a small menu: **Refresh quota** / **Open dashboard** /
@@ -100,6 +102,15 @@ The dashboard is a self-contained HTML page (no JavaScript, no CDN) with cards f
 today / this week / this month / all-time tokens, the official 5h/7d bars with reset
 countdowns, a GitHub-style daily heatmap, an hourly bar chart, and a per-model breakdown.
 Its local server listens on `127.0.0.1` only.
+
+### Storage & footprint
+
+Tiny. The tool reads Claude Code's own `~/.claude/projects/**/*.jsonl` session logs
+**read-only** (it never creates or changes them), and the only file it writes is a small
+JSON cache at `~/.claude/usage-peek-quota.json` — a few hundred bytes holding just
+percentages, reset times, and your plan label (no conversation content). No database, no
+background daemon; the menu bar app sits idle and refreshes every couple of minutes, so
+CPU, memory, and disk use are negligible.
 
 ![Claude Code usage dashboard — token cards, 5-hour and 7-day quota bars, and a GitHub-style daily usage heatmap](docs/claude-usage-dashboard.png)
 
