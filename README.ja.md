@@ -135,8 +135,7 @@ app のエンジンは、直接実行もできる監査可能な小さな Python
 python3 usage.py            # 日別＋モデル別のトークン集計（--json で生データ）
 python3 dashboard.py        # HTML ダッシュボードを生成して開く
 python3 dashboard.py --serve  # ライブダッシュボード http://127.0.0.1:8787
-python3 quota.py            # 公式 5h/7d% を表示（api.anthropic.com へ 1 回）
-python3 watch.py            # バックグラウンド監視：50/75/90% で macOS 通知
+python3 quota.py            # 公式 5h/7d（+モデル週間上限）% を表示（api.anthropic.com へ GET 1 回）
 ```
 
 `usage.py` を Claude Code ターミナルの **statusline** に組み込むこともできます ——

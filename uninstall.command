@@ -8,9 +8,9 @@ set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "正在卸载 claude-usage-peek ..."
 
-# 1) 停掉后台服务 / 看门狗 / 菜单栏程序
+# 1) 停掉后台服务 / 菜单栏程序 (以及可能残留的旧版看门狗)
 pkill -f "claude-usage-peek.*dashboard.py" 2>/dev/null && echo "  · 已停止看板服务" || true
-pkill -f "claude-usage-peek.*watch.py" 2>/dev/null && echo "  · 已停止看门狗" || true
+pkill -f "claude-usage-peek.*watch.py" 2>/dev/null || true  # 旧版本残留, 现已并入 app
 pkill -f "ClaudeUsageBar" 2>/dev/null && echo "  · 已退出菜单栏程序" || true
 
 # 2) 桌面图标 / 菜单栏 app + 它的语言偏好

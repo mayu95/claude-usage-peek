@@ -142,8 +142,7 @@ The app is powered by small, auditable Python scripts you can also run directly:
 python3 usage.py            # per-day + per-model token summary (add --json for raw)
 python3 dashboard.py        # generate & open the HTML dashboard
 python3 dashboard.py --serve  # live dashboard at http://127.0.0.1:8787
-python3 quota.py            # print official 5h/7d % (one call to api.anthropic.com)
-python3 watch.py            # background watchdog: macOS notification at 50/75/90%
+python3 quota.py            # print official 5h/7d (+ model weekly limit) % (one GET to api.anthropic.com)
 ```
 
 You can also wire `usage.py` into the Claude Code terminal **statusline** — see

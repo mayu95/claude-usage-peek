@@ -126,8 +126,7 @@ app 的引擎是几个可审计的小 Python 脚本，你也可以直接运行�
 python3 usage.py            # 按天 + 按模型的 token 汇总（加 --json 出原始数据）
 python3 dashboard.py        # 生成并打开 HTML 看板
 python3 dashboard.py --serve  # 本地实时看板 http://127.0.0.1:8787
-python3 quota.py            # 打印官方 5h/7d%（连一次 api.anthropic.com）
-python3 watch.py            # 后台看门狗：用量到 50/75/90% 弹 macOS 通知
+python3 quota.py            # 打印官方 5h/7d（+模型周限额）%（GET 一次 api.anthropic.com）
 ```
 
 也可以把 `usage.py` 接进 Claude Code 终端的 **statusline** —— 见 [usage.py](usage.py)。

@@ -86,12 +86,12 @@ let STRINGS: [String: [Lang: String]] = [
     "win_scoped":  [.en: "Model weekly limit", .zh: "模型周限额", .ja: "モデル週間上限"],
     "alerts_toggle": [.en: "Usage alerts", .zh: "限额提醒", .ja: "使用量アラート"],
     "alert_title": [.en: "Claude usage alert", .zh: "Claude 用量提醒", .ja: "Claude 使用量アラート"],
-    "alert_level": [.en: "{label} weekly limit — {p}% used",
-                    .zh: "{label} 周限额已用 {p}%",
-                    .ja: "{label} 週間上限 {p}% 使用"],
-    "alert_daily": [.en: "Heavy {label} use today — over 20% of the weekly limit",
-                    .zh: "今天 {label} 用量偏高 —— 已超周限额的 20%",
-                    .ja: "本日の {label} 使用が多め —— 週間上限の20%超"],
+    "alert_level": [.en: "{label} — {p}% used",
+                    .zh: "{label} 已用 {p}%",
+                    .ja: "{label} — {p}% 使用"],
+    "alert_daily": [.en: "{label} — over 20% used today",
+                    .zh: "{label}：今日已用超 20%",
+                    .ja: "{label} — 本日20%超を使用"],
 ]
 
 func tr(_ key: String) -> String {
@@ -447,16 +447,28 @@ final class AppController: NSObject, NSApplicationDelegate {
         return f.string(from: Date())
     }
 
-    /// 检查模型周限额, 越过档位 / 单日涨幅过大时弹通知。默认开, 菜单可关。
+    /// 检查各限额, 越过档位 / 单日涨幅过大时弹通知。默认开, 菜单可关。
+    /// 5h / 7d / 模型周限额 都用同一套档位(50/75/+5%); 周维度(7d、模型)另加单日增量。
     private func checkAlerts(_ q: Quota) {
         let d = UserDefaults.standard
         guard (d.object(forKey: "alerts") as? Bool) ?? true else { return }
-        guard let util = q.scopedUtil else { return }
-        let label = q.scopedLabel ?? tr("win_scoped")
-        let pct = Int(util.rounded())
+        if let u = q.util5h { levelAlert(d, "5h", tr("win5h"), u) }
+        if let u = q.util7d {
+            levelAlert(d, "7d", tr("win7d"), u)
+            dailyAlert(d, "7d", tr("win7d"), u)
+        }
+        if let u = q.scopedUtil {
+            let label = q.scopedLabel ?? tr("win_scoped")
+            levelAlert(d, "fable", label, u)
+            dailyAlert(d, "fable", label, u)
+        }
+    }
 
-        // 总量档位: 跨过新档位才弹一次; 掉下来(周重置)则重新武装
-        var alerted = d.integer(forKey: "fableAlertLevel")
+    /// 档位提醒(边沿触发): 跨过新档位弹一次; 掉下来(重置)则重新武装。每个限额独立记状态。
+    private func levelAlert(_ d: UserDefaults, _ key: String, _ label: String, _ util: Double) {
+        let pct = Int(util.rounded())
+        let k = "alertLevel_" + key
+        var alerted = d.integer(forKey: k)
         if pct < alerted { alerted = 0 }
         if let top = alertThresholds.filter({ $0 <= pct && $0 > alerted }).max() {
             notify(tr("alert_title"),
@@ -464,18 +476,21 @@ final class AppController: NSObject, NSApplicationDelegate {
                                     .replacingOccurrences(of: "{p}", with: "\(pct)"))
             alerted = top
         }
-        d.set(alerted, forKey: "fableAlertLevel")
+        d.set(alerted, forKey: k)
+    }
 
-        // 单日增量: 记当天起点%, 当天涨幅超过 20 个百分点提醒一次; 跨天重置基线
-        if d.string(forKey: "fableDayDate") != dayString() {
-            d.set(dayString(), forKey: "fableDayDate")
-            d.set(util, forKey: "fableDayBase")
-            d.set(false, forKey: "fableDailyAlerted")
+    /// 单日增量提醒(仅周维度): 当天涨幅超过 20 个百分点弹一次; 跨天重置基线。
+    private func dailyAlert(_ d: UserDefaults, _ key: String, _ label: String, _ util: Double) {
+        let dk = "dayDate_" + key, bk = "dayBase_" + key, fk = "dailyAlerted_" + key
+        if d.string(forKey: dk) != dayString() {
+            d.set(dayString(), forKey: dk)
+            d.set(util, forKey: bk)
+            d.set(false, forKey: fk)
         }
-        if util - d.double(forKey: "fableDayBase") >= 20, !d.bool(forKey: "fableDailyAlerted") {
+        if util - d.double(forKey: bk) >= 20, !d.bool(forKey: fk) {
             notify(tr("alert_title"),
                    tr("alert_daily").replacingOccurrences(of: "{label}", with: label))
-            d.set(true, forKey: "fableDailyAlerted")
+            d.set(true, forKey: fk)
         }
     }
 
