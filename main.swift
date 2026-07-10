@@ -502,6 +502,13 @@ final class AppController: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// app 已在运行时用户又双击了它(访达/启动台): 弹出面板作为反馈。
+    /// Re-opened while already running (double-click in Finder): show the panel.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !popover.isShown { togglePopover() }
+        return false
+    }
+
     /// 用缓存刷新菜单栏标题（显示 5h 剩余%） / menu-bar title shows 5h remaining %
     private func updateTitle() {
         let q = Quota.load()
