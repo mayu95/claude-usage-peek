@@ -357,12 +357,31 @@ final class AppController: NSObject, NSApplicationDelegate {
     private let port = "8787"
     private var newerVersion: String?   // 远端更新的版本号(仅当比本地新时置位)
 
-    func applicationDidFinishLaunching(_ n: Notification) {
+    /// 创建(或重建)菜单栏图标。断开外接屏/睡眠唤醒时菜单栏可能重建导致图标丢失,
+    /// 所以单独抽出来, 屏幕参数一变就重挂一次。
+    /// (Re)create the status item; rebuilt on display changes because macOS can
+    /// drop status items of agent apps when the menu bar is reconstructed.
+    private func makeStatusItem() {
+        if let old = statusItem { NSStatusBar.system.removeStatusItem(old) }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.autosaveName = "ClaudeUsageBar"   // 稳定身份: macOS 据此记住图标位置(⌘拖动后也保持)
         statusItem.button?.title = "🤖 …"
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        updateTitle()
+    }
+
+    func applicationDidFinishLaunching(_ n: Notification) {
+        makeStatusItem()
+
+        // 显示器接入/断开、合盖唤醒等会触发; 重建图标, 防止它凭空消失。
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.makeStatusItem()
+        }
 
         panel = PanelViewController()
         panel.refreshAction = { [weak self] in self?.refreshQuota() }
