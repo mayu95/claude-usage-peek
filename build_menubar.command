@@ -79,32 +79,37 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 # 生成 ✨ app 图标 (访达/通知横幅上显示的就是它)。emoji 渲染失败则用系统默认图标。
+# 中间文件放 mktemp 私有目录 (共享 /tmp 下固定文件名可能被其他用户抢占), 退出自动清理。
 # 注意末尾的 touch: 不刷新的话 Finder 会一直用缓存的旧图标。
 echo "生成图标..."
-osascript -l JavaScript >/dev/null 2>&1 <<'JS' || true
-ObjC.import('AppKit');
-var size=1024, img=$.NSImage.alloc.initWithSize($.NSMakeSize(size,size));
-img.lockFocus;
-var para=$.NSMutableParagraphStyle.alloc.init; para.alignment=1;
-var attrs=$.NSMutableDictionary.alloc.init;
-attrs.setObjectForKey($.NSFont.systemFontOfSize(800),'NSFont');
-attrs.setObjectForKey(para,'NSParagraphStyle');
-$.NSString.alloc.initWithUTF8String('✨').drawInRectWithAttributes($.NSMakeRect(0,-40,size,size),attrs);
-img.unlockFocus;
-var rep=$.NSBitmapImageRep.imageRepWithData(img.TIFFRepresentation);
-rep.representationUsingTypeProperties(4,$.nil).writeToFileAtomically($('/tmp/cup-icon.png'),true);
+ICON_TMP="$(mktemp -d)"
+trap 'rm -rf "$ICON_TMP"' EXIT
+ICON="$ICON_TMP/cup-icon.png"
+osascript -l JavaScript - "$ICON" >/dev/null 2>&1 <<'JS' || true
+function run(argv) {
+  ObjC.import('AppKit');
+  var size=1024, img=$.NSImage.alloc.initWithSize($.NSMakeSize(size,size));
+  img.lockFocus;
+  var para=$.NSMutableParagraphStyle.alloc.init; para.alignment=1;
+  var attrs=$.NSMutableDictionary.alloc.init;
+  attrs.setObjectForKey($.NSFont.systemFontOfSize(800),'NSFont');
+  attrs.setObjectForKey(para,'NSParagraphStyle');
+  $.NSString.alloc.initWithUTF8String('✨').drawInRectWithAttributes($.NSMakeRect(0,-40,size,size),attrs);
+  img.unlockFocus;
+  var rep=$.NSBitmapImageRep.imageRepWithData(img.TIFFRepresentation);
+  rep.representationUsingTypeProperties(4,$.nil).writeToFileAtomically($(argv[0]),true);
+}
 JS
 
-if [ -f /tmp/cup-icon.png ]; then
-  ISET=/tmp/cup.iconset; rm -rf "$ISET"; mkdir -p "$ISET"
+if [ -f "$ICON" ]; then
+  ISET="$ICON_TMP/cup.iconset"; mkdir -p "$ISET"
   for pair in "16 16x16" "32 16x16@2x" "32 32x32" "64 32x32@2x" \
               "128 128x128" "256 128x128@2x" "256 256x256" "512 256x256@2x" \
               "512 512x512" "1024 512x512@2x"; do
     set -- $pair
-    sips -z "$1" "$1" /tmp/cup-icon.png --out "$ISET/icon_$2.png" >/dev/null
+    sips -z "$1" "$1" "$ICON" --out "$ISET/icon_$2.png" >/dev/null
   done
   iconutil -c icns "$ISET" -o "$APP/Contents/Resources/AppIcon.icns"
-  rm -rf "$ISET" /tmp/cup-icon.png
   echo "图标完成。"
 else
   echo "跳过图标(emoji 渲染不可用), 用默认图标。"

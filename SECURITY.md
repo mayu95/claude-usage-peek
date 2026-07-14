@@ -30,7 +30,10 @@ This tool is designed to be **local and minimal**, which keeps its attack surfac
   or prints it. Usage data under `~/.claude/projects` is read-only and never modified.
 - **Network surface:**
   - `quota.py` → `api.anthropic.com` only (to read your real rate-limit %).
-  - The dashboard's local server binds to `127.0.0.1` only (not reachable from the network).
+  - The dashboard's local server binds to `127.0.0.1` only (not reachable from the
+    network). As with any localhost service, other processes or logged-in users on the
+    *same machine* could view it — it only ever shows token counts, model names and
+    timestamps, never your token or conversation content.
   - An **optional, off-by-default** update check fetches a version number from GitHub;
     it sends no data about you and stays silent unless you enable it.
 

@@ -456,7 +456,7 @@ def build_quota(a) -> str:
 
         rows.append(
             f'<div class="quota-row">'
-            f'<div class="quota-head"><span>{label}</span>'
+            f'<div class="quota-head"><span>{html.escape(str(label))}</span>'
             f'<span class="muted">{head}{extra}</span></div>'
             f'<div class="quota-track"><div class="quota-fill" '
             f'style="width:{pct:.1f}%;background:{color}"></div></div>'
