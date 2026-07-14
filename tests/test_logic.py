@@ -108,6 +108,24 @@ class TestFmtDur(unittest.TestCase):
             dashboard.LANG = "en"
 
 
+class TestWriteCache(unittest.TestCase):
+    def test_atomic_write(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            orig = quota.CACHE
+            try:
+                quota.CACHE = Path(td) / "cache.json"
+                data = {"usageData": {"utilization5h": 12.3}, "scopedWeekly": None}
+                quota._write_cache(data)
+                # 结果完整可读, 且没有残留的临时文件
+                import json as _json
+                self.assertEqual(_json.loads(quota.CACHE.read_text()), data)
+                self.assertEqual([p.name for p in Path(td).iterdir()], ["cache.json"])
+            finally:
+                quota.CACHE = orig
+
+
 class TestLevelFn(unittest.TestCase):
     def test_no_usage(self):
         lvl = dashboard._level_fn([0, 0, 0])

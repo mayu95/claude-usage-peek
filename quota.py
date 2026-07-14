@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -123,11 +124,18 @@ def fetch() -> dict | None:
         # 某模型的周限额(如 Fable); 账号没有则 None
         "scopedWeekly": _scoped_from(data),
     }
+    _write_cache(out)
+    return out
+
+
+def _write_cache(out: dict):
+    """原子写缓存: 先写同目录临时文件再 os.replace, 并发读者永远只会看到完整 JSON。"""
     try:
-        CACHE.write_text(json.dumps(out, ensure_ascii=False, indent=2))
+        tmp = CACHE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(out, ensure_ascii=False, indent=2))
+        os.replace(tmp, CACHE)
     except OSError:
         pass
-    return out
 
 
 def main():
