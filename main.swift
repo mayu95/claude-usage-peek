@@ -17,6 +17,7 @@
 
 import AppKit
 import ServiceManagement
+import UserNotifications
 
 // MARK: - i18n
 
@@ -85,6 +86,7 @@ let STRINGS: [String: [Lang: String]] = [
                     .ja: "公式のレート制限値（整数精度）。使用状況ページと約 1% 異なる場合があります。"],
     "win_scoped":  [.en: "Model weekly limit", .zh: "模型周限额", .ja: "モデル週間上限"],
     "alerts_toggle": [.en: "Usage alerts", .zh: "限额提醒", .ja: "使用量アラート"],
+    "menuTest":    [.en: "Test alert", .zh: "测试提醒", .ja: "アラートをテスト"],
     "alert_title": [.en: "Claude usage alert", .zh: "Claude 用量提醒", .ja: "Claude 使用量アラート"],
     "alert_level": [.en: "{label} — {p}% used",
                     .zh: "{label} 已用 {p}%",
@@ -350,7 +352,7 @@ final class PanelViewController: NSViewController {
 
 // MARK: - 主控制器 / App controller
 
-final class AppController: NSObject, NSApplicationDelegate {
+final class AppController: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var panel: PanelViewController!
@@ -374,6 +376,14 @@ final class AppController: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ n: Notification) {
         makeStatusItem()
+
+        // 原生通知授权(首次弹一次"允许通知?"; 拒绝也没关系, 提醒会退回 osascript)。
+        // 只在正常 .app 包内运行时启用 —— 裸二进制没有 bundle 身份, UN 框架会出问题。
+        if Bundle.main.bundleIdentifier != nil {
+            let center = UNUserNotificationCenter.current()
+            center.delegate = self
+            center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
 
         // 显示器接入/断开、合盖唤醒等会触发; 重建图标, 防止它凭空消失。
         NotificationCenter.default.addObserver(
@@ -448,14 +458,41 @@ final class AppController: NSObject, NSApplicationDelegate {
         }.resume()
     }
 
-    /// 弹一条 macOS 通知(用 osascript, 与项目其它部分一致, 无需额外权限)。
-    /// title/body 里的反斜杠和双引号先转义, 防止(如模型名含特殊字符时)破坏 AppleScript 字符串。
+    /// 以 app 自己的身份发原生通知: 自带 app 图标(✨)和声音, 进通知中心;
+    /// 停留样式可在 系统设置→通知→Claude Usage Bar 里调(选「提醒」则不点不消失)。
+    /// 未授权/无 bundle 身份时退回 osascript(归属"脚本编辑器")。
     private func notify(_ title: String, _ body: String) {
+        guard Bundle.main.bundleIdentifier != nil else { return osaNotify(title, body) }
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { [weak self] settings in
+            guard let self else { return }
+            if settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional {
+                let content = UNMutableNotificationContent()
+                content.title = title
+                content.body = body
+                content.sound = .default
+                center.add(UNNotificationRequest(identifier: UUID().uuidString,
+                                                 content: content, trigger: nil))
+            } else {
+                DispatchQueue.main.async { self.osaNotify(title, body) }
+            }
+        }
+    }
+
+    /// app 没有窗口概念但可能被系统视为"前台": 前台时也照常显示横幅+声音。
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+
+    /// 兜底通知(osascript)。title/body 转义, 防止特殊字符破坏 AppleScript 字符串。
+    private func osaNotify(_ title: String, _ body: String) {
         func esc(_ s: String) -> String {
             s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         }
         run(["/usr/bin/osascript", "-e",
-             "display notification \"\(esc(body))\" with title \"\(esc(title))\""], wait: false)
+             "display notification \"\(esc(body))\" with title \"\(esc(title))\" sound name \"Ping\""], wait: false)
     }
 
     private func notifyUpdate(_ v: String) {
@@ -636,6 +673,8 @@ final class AppController: NSObject, NSApplicationDelegate {
         alertsItem.state = ((UserDefaults.standard.object(forKey: "alerts") as? Bool) ?? true) ? .on : .off
         menu.addItem(alertsItem)
 
+        menu.addItem(withTitle: tr("menuTest"), action: #selector(testAlert), keyEquivalent: "").target = self
+
         menu.addItem(.separator())
         menu.addItem(withTitle: tr("quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         if let button = statusItem.button {
@@ -665,6 +704,13 @@ final class AppController: NSObject, NSApplicationDelegate {
     @objc private func toggleAlerts() {
         let on = !((UserDefaults.standard.object(forKey: "alerts") as? Bool) ?? true)
         UserDefaults.standard.set(on, forKey: "alerts")
+    }
+
+    /// 预览一条提醒(横幅+声音+系统通知), 方便随时确认提醒能正常出现。
+    @objc private func testAlert() {
+        notify(tr("alert_title"),
+               tr("alert_level").replacingOccurrences(of: "{label}", with: "Fable")
+                                .replacingOccurrences(of: "{p}", with: "75"))
     }
 
     /// 切换"开机自启"。失败(例如需在系统设置里批准)则忽略, 下次打开菜单会反映真实状态。
