@@ -79,6 +79,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 # 生成 ✨ app 图标 (访达/通知横幅上显示的就是它)。emoji 渲染失败则用系统默认图标。
+# 注意末尾的 touch: 不刷新的话 Finder 会一直用缓存的旧图标。
 echo "生成图标..."
 osascript -l JavaScript >/dev/null 2>&1 <<'JS' || true
 ObjC.import('AppKit');
@@ -108,6 +109,7 @@ if [ -f /tmp/cup-icon.png ]; then
 else
   echo "跳过图标(emoji 渲染不可用), 用默认图标。"
 fi
+touch "$APP"   # 让 Finder 重新读图标(否则显示缓存的旧图标)
 
 echo
 echo "完成 → $APP"

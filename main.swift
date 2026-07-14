@@ -599,7 +599,7 @@ final class AppController: NSObject, NSApplicationDelegate, UNUserNotificationCe
         open "http://127.0.0.1:\(port)"
         """
         run(["/bin/zsh", "-c", cmd], wait: false)
-        popover.performClose(nil)
+        closePopover()
     }
 
     private func run(_ args: [String], wait: Bool) {
@@ -622,13 +622,30 @@ final class AppController: NSObject, NSApplicationDelegate, UNUserNotificationCe
         }
     }
 
+    private var clickMonitor: Any?
+
     private func togglePopover() {
         guard let button = statusItem.button else { return }
         if popover.isShown {
-            popover.performClose(nil)
+            closePopover()
         } else {
             panel.refresh()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // .transient 对不活跃的菜单栏 app 常失效(点别处关不掉, 只能再点图标)。
+            // 全局监听: 弹窗期间点弹窗外任何地方(桌面/其它 app/空白)立即关闭。
+            clickMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.leftMouseDown, .rightMouseDown]
+            ) { [weak self] _ in
+                self?.closePopover()
+            }
+        }
+    }
+
+    private func closePopover() {
+        popover.performClose(nil)
+        if let m = clickMonitor {
+            NSEvent.removeMonitor(m)
+            clickMonitor = nil
         }
     }
 
