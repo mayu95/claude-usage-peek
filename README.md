@@ -65,7 +65,7 @@ into a full HTML dashboard with charts and a usage heatmap.
 
 - **Left-click** the 🤖 → a panel showing:
   - **5-hour window** and **7-day window** progress bars (fill = how much you've used,
-    green → orange → red), the **used %**, the **reset time**, and a **projection** of
+    green → yellow → orange → red), the **used %**, the **reset time**, and a **projection** of
     where you'll land by reset at the current rate
   - if your plan has a **per-model weekly limit** (e.g. **Fable**), a bar for that too —
     the model name comes straight from Anthropic, so it follows any rename automatically

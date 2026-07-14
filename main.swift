@@ -150,10 +150,12 @@ func fmtReset(_ ts: Int?) -> String {
 }
 
 /// 用量百分比 -> 进度条颜色（越满越红） / bar color, redder as it fills
+/// <50 绿; 50–75 微微发黄(黄绿); 75 起颜色与之前一致(橙/红)。
 func barColor(_ used: Double?) -> NSColor {
     guard let used else { return .systemGray }
     switch used {
-    case ..<60: return .systemGreen
+    case ..<50: return .systemGreen
+    case ..<75: return NSColor.systemGreen.blended(withFraction: 0.5, of: .systemYellow) ?? .systemGreen
     case ..<85: return .systemOrange
     default: return .systemRed
     }

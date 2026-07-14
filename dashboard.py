@@ -442,7 +442,9 @@ def build_quota(a) -> str:
         else:
             pct = min(100.0, val / cap * 100) if cap else 0
             head = t("q_estimate", pct=f"{pct:.0f}", cap=h(cap))
-        color = "#3fb950" if pct < 75 else ("#d29922" if pct < 90 else "#f85149")
+        # <50 绿; 50–75 微微发黄(黄绿); 75/90 起颜色不变(黄/红)
+        color = ("#3fb950" if pct < 50 else
+                 ("#88a939" if pct < 75 else ("#d29922" if pct < 90 else "#f85149")))
 
         extra = ""
         if reset and reset > now:
