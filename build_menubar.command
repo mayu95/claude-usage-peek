@@ -56,7 +56,7 @@ swiftc -O main.swift Config.swift -o "$EXEC"
 
 echo "组装 .app …"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 mv "$EXEC" "$APP/Contents/MacOS/$EXEC"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -70,12 +70,44 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>$VER</string>
     <key>CFBundleShortVersionString</key><string>$VER</string>
     <key>CFBundleExecutable</key><string>$EXEC</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
 </dict>
 </plist>
 PLIST
+
+# 生成 ✨ app 图标 (访达/通知横幅上显示的就是它)。emoji 渲染失败则用系统默认图标。
+echo "生成图标..."
+osascript -l JavaScript >/dev/null 2>&1 <<'JS' || true
+ObjC.import('AppKit');
+var size=1024, img=$.NSImage.alloc.initWithSize($.NSMakeSize(size,size));
+img.lockFocus;
+var para=$.NSMutableParagraphStyle.alloc.init; para.alignment=1;
+var attrs=$.NSMutableDictionary.alloc.init;
+attrs.setObjectForKey($.NSFont.systemFontOfSize(800),'NSFont');
+attrs.setObjectForKey(para,'NSParagraphStyle');
+$.NSString.alloc.initWithUTF8String('✨').drawInRectWithAttributes($.NSMakeRect(0,-40,size,size),attrs);
+img.unlockFocus;
+var rep=$.NSBitmapImageRep.imageRepWithData(img.TIFFRepresentation);
+rep.representationUsingTypeProperties(4,$.nil).writeToFileAtomically($('/tmp/cup-icon.png'),true);
+JS
+
+if [ -f /tmp/cup-icon.png ]; then
+  ISET=/tmp/cup.iconset; rm -rf "$ISET"; mkdir -p "$ISET"
+  for pair in "16 16x16" "32 16x16@2x" "32 32x32" "64 32x32@2x" \
+              "128 128x128" "256 128x128@2x" "256 256x256" "512 256x256@2x" \
+              "512 512x512" "1024 512x512@2x"; do
+    set -- $pair
+    sips -z "$1" "$1" /tmp/cup-icon.png --out "$ISET/icon_$2.png" >/dev/null
+  done
+  iconutil -c icns "$ISET" -o "$APP/Contents/Resources/AppIcon.icns"
+  rm -rf "$ISET" /tmp/cup-icon.png
+  echo "图标完成。"
+else
+  echo "跳过图标(emoji 渲染不可用), 用默认图标。"
+fi
 
 echo
 echo "完成 → $APP"
